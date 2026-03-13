@@ -1,0 +1,57 @@
+# --- Python / virtualenv ---
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+.venv/
+venv/
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# --- IDE / editor metadata ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*.DS_Store
+
+# --- Logs and debug output ---
+logs/
+*.log
+*.out
+*.err
+
+# --- TensorBoard / experiment artifacts ---
+runs/
+events.out.tfevents.*
+
+# --- Datasets and downloads ---
+data/
+dataset/
+SPEECHCOMMANDS/
+SPEECH/
+SpeechGL/
+CIFAR/
+CIFARGL/
+
+# --- Model checkpoints and intermediate artifacts ---
+*.pt
+*.pth
+*.ckpt
+*.pkl
+
+# --- Flower / runtime cache ---
+.flwr/
+
+# --- OS-specific ---
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+
+
+/docs/*.pdf
