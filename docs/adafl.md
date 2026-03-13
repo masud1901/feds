@@ -62,9 +62,9 @@ DSFL's authors explicitly acknowledge this in the conclusion: *"it is still unkn
 
 ADAFL replaces DSFL's static K-sampling with a feedback-driven update rule. The intuition is simple: if a client's local loss improved substantially in round *t*, its current update was informative — it can afford to compress more next round. If loss barely changed, the update was weak — send richer data by relaxing compression.
 
-**K<sub>i</sub>[*t*+1] = clip( K<sub>i</sub>[*t*] + η · (ΔL<sub>i</sub>[*t*] − τ), K<sub>min</sub>, K<sub>max</sub> )**
+**K<sub>i</sub>[*t*+1] = clip( K<sub>i</sub>[*t*] - η · (ΔL<sub>i</sub>[*t*] − τ), K<sub>min</sub>, K<sub>max</sub> )**
 
-where **ΔL<sub>i</sub>[*t*] = L<sub>i</sub>[*t*−1] − L<sub>i</sub>[*t*]** is the local loss improvement of client *i* in round *t*, τ is a threshold (target improvement rate), η is a learning rate for the K-update, and K<sub>min</sub>, K<sub>max</sub> define the feasible compression range. This update runs entirely on the client using locally available information — no additional communication to the server is required.
+where **ΔL<sub>i</sub>[*t*] = L<sub>i</sub>[*t*−1] − L<sub>i</sub>[*t*]** is the local loss improvement of client *i* in round *t*, τ is a threshold (target improvement rate), η is a learning rate for the K-update, and K<sub>min</sub>, K<sub>max</sub> define the feasible compression range. This update runs entirely on the client using locally available information — no additional communication to the server is required. Note the negative sign: larger loss improvements lead to *greater* compression (smaller K).
 
 ### 4.2 Integration with DSFL's Pipeline
 
@@ -76,12 +76,12 @@ ADAFL plugs into DSFL's existing Algorithm 1 with a single modification — repl
 | Line 8 | Perform E local updates | Same — additionally record L<sub>i</sub>[*t*] |
 | Line 9 | Compute ΔW<sub>i</sub>[*t*] | Same — unchanged |
 | Line 11 | Compute LSS mask *l*<sub>i</sub>[*t*] via CKA | Same — unchanged |
-| **Line 14** | K<sub>i</sub> = C<sub>i</sub>[*t*] (from truncated normal) | **K<sub>i</sub>[*t*+1] = clip(K<sub>i</sub>[*t*] + η·(ΔL<sub>i</sub>[*t*]−τ), K<sub>min</sub>, K<sub>max</sub>) ← CHANGE** |
+| **Line 14** | K<sub>i</sub> = C<sub>i</sub>[*t*] (from truncated normal) | **K<sub>i</sub>[*t*+1] = clip(K<sub>i</sub>[*t*] - η·(ΔL<sub>i</sub>[*t*]−τ), K<sub>min</sub>, K<sub>max</sub>) ← CHANGE** |
 | Lines 15–18 | Top-K sparsification, upload, error update | Same — K<sub>i</sub>[*t*] used from updated rule |
 
 ### 4.3 Why This Works: Intuition
 
-Consider two clients in round *t*. **Client A** (high heterogeneity, poor channel) achieves ΔL<sub>A</sub> = 0.01, well below threshold τ = 0.05. ADAFL decreases K<sub>A</sub> — client A sends **sparser** updates (fewer parameters) next round. **Client B** (well-aligned data, good channel) achieves ΔL<sub>B</sub> = 0.12, above threshold. ADAFL increases K<sub>B</sub> — client B can afford to send **denser** (more parameters) updates without hurting convergence. Over many rounds, each client's K settles near the level appropriate for its current condition without any manual tuning.
+Consider two clients in round *t*. **Client A** (high heterogeneity, poor channel) achieves ΔL<sub>A</sub> = 0.01, well below threshold τ = 0.05. ADAFL *increases* K<sub>A</sub> (since ΔL - τ is negative) — client A sends **denser** updates (more parameters) next round to catch up. **Client B** (well-aligned data, good channel) achieves ΔL<sub>B</sub> = 0.12, above threshold. ADAFL *decreases* K<sub>B</sub> — client B is learning well and can afford to send **sparser** (fewer parameters) updates without hurting convergence. Over many rounds, each client's K settles near the level appropriate for its current condition without any manual tuning.
 
 ---
 
