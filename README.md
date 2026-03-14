@@ -1,73 +1,177 @@
 # FEDS: Loss-Feedback Adaptive Sparsification for Federated Learning
 
-This repository contains a modified version of Mahdi Beitollahi’s **DSFL (Dynamic Sparsification for Federated Learning)** codebase, extended with **FEDS**, a loss-feedback driven mechanism for adaptive sparsification in heterogeneous wireless FL.
+This repository implements **FEDS**, a loss-feedback driven mechanism for adaptive sparsification in federated learning over heterogeneous wireless networks. FEDS extends Mahdi Beitollahi's **DSFL (Dynamic Sparsification for Federated Learning)** codebase with dynamic compression rates that adapt based on local training progress.
 
-- **DSFL baseline**: two-level sparsification with
-  - **Layer-wise Similarity Sparsification (LSS)** using CKA to exploit global redundancy across clients, and
-  - **Extended top-K sparsification** to respect each client’s uplink capacity.
-- **FEDS extension (this work)**: keeps DSFL’s system model and LSS + top‑K pipeline, but replaces the *static*, truncated-normal choice of sparsification rate \(K_i[t]\) with a **loss-feedback adaptive rule** on each client:
-  \(K_i[t+1] = \text{clip}\big(K_i[t] + \eta(\Delta L_i[t] - \tau), K_{\min}, K_{\max}\big)\),
-  where \(\Delta L_i[t]\) is the client’s local loss improvement. This requires **no additional communication** and targets better accuracy-per-bit under heterogeneous capacities.
+## Key Features
 
-The high-level research proposal and Globecom positioning are documented in `docs/feds.md`.
+- **Two-level sparsification pipeline** (inherited from DSFL):
+  - **Layer-wise Similarity Sparsification (LSS)** using CKA to exploit global redundancy across clients
+  - **Top-K sparsification** to respect each client's uplink capacity
+
+- **FEDS adaptive K mechanism** (this work):
+  - Loss-feedback driven per-client sparsification rate updates
+  - **Zero additional communication overhead** - uses only locally available training signals
+  - **Momentum-smoothed updates** for stability
+  - **Z-score normalization** of loss improvements for dataset-agnostic hyperparameters
+  - **Warmup phase** to prevent early-round instability
+  - **Decaying learning rate** for K updates (eta)
+
+The update rule:
+```
+K_i[t+1] = clip(K_i[t] - η * normalized(ΔL_i[t] - τ), K_min, K_max)
+```
+where `ΔL_i[t]` is the relative loss improvement, `τ` is the mean improvement across clients, and normalization makes `η` work across different datasets.
 
 ## Project Structure
 
-- `server.py`: Flower server with a custom `FedComp` strategy and the DSFL/FEDS aggregation hook.
-- `clients/`:
-  - `client-MNIST.py`
-  - `client-CIFAR.py`
-  - `client-SpeechCommands.py`  
-  Standard Flower NumPy clients that perform local SGD on each dataset.
-- `utils/`:
-  - `dsfl.py`: flatten/de-flatten utilities and the `alastor` hook which calls the sparsification logic.
-  - `LayerWiseSparsification.py`: implementation of LSS, top‑K sparsification, and error accumulation (DSFL core).
-  - `FindingK.py`, `FindingKSpeech.py`: CKA-based layer similarity tools used to build LSS masks.
-- `docs/feds.md`: FEDS proposal, related work, system model, experimental plan, and conference roadmap.
+```
+adaptive-sparsification/
+├── server.py                          # Flower server with FedComp strategy
+├── clients/
+│   ├── client-MNIST.py                # MNIST client (CNN)
+│   ├── client-CIFAR.py                # CIFAR-10 client (CNN)
+│   └── client-SpeechCommands.py       # Speech Commands client (CNN)
+├── utils/
+│   ├── dsfl.py                        # Original DSFL utilities
+│   ├── dsfl_feds.py                   # FEDS-specific utilities
+│   ├── LayerWiseSparsification.py     # Original DSFL sparsification
+│   ├── LayerWiseSparsification_feds.py # FEDS adaptive sparsification
+│   ├── FindingK.py                    # CKA analysis for CIFAR
+│   ├── FindingKSpeech.py              # CKA analysis for Speech
+│   ├── visualize_k_trajectory.py      # K trajectory visualization
+│   └── validate_feds.py               # FEDS validation script
+├── docs/
+│   └── feds.md                        # Research proposal & Globecom plan
+├── run-mnistclients.sh                # Launch MNIST clients
+├── run-cifarclients.sh                # Launch CIFAR clients
+└── run-speechclients.sh               # Launch Speech clients
+```
 
 ## Installation
 
-Create a Python environment (recommended) and install the main dependencies:
+Create a Python environment and install dependencies:
 
 ```bash
 pip install flwr torch torchvision torchaudio tensorboard numpy matplotlib scipy
 ```
 
-You may also need to install `torch_cka` and dataset-specific dependencies used in `utils/FindingK*.py`.
+For CKA-based analysis:
+```bash
+pip install torch_cka
+```
 
 ## Running Experiments
 
-The workflow follows the original DSFL setup (Flower-based FL with multiple clients):
+### 1. Start the Server
 
-1. **Start the server** (from the repo root):
+```bash
+python server.py
+```
 
-   ```bash
-   python server.py
-   ```
+The server will:
+- Initialize with a pre-trained global model (`initial_global_model_MNIST`)
+- Run for 300 rounds by default
+- Log accuracy, loss, and K statistics to TensorBoard
 
-2. **Start clients** in separate terminals using the provided scripts (one per client/device). For example, to run MNIST:
+### 2. Start Clients
 
-   ```bash
-   ./run-mnistclients.sh
-   ```
+Run clients in separate terminals:
 
-   Similarly, use:
+```bash
+# For MNIST
+./run-mnistclients.sh
 
-   - `./run-cifarclients.sh` for CIFAR‑10,
-   - `./run-speechclients.sh` for Speech Commands.
+# For CIFAR-10
+./run-cifarclients.sh
 
-The current codebase is being adapted from DSFL to FEDS; for strict DSFL reproduction vs. FEDS comparisons (as planned for the Globecom submission), see the details and parameter choices in `docs/feds.md`.
+# For Speech Commands
+./run-speechclients.sh
+```
 
-## Status
+### 3. Monitor Training
 
-- **DSFL functionality**: imported from the original code and under test in this repository.
-- **FEDS integration**: in progress. The goal is to:
-  - implement the loss-feedback \(K_i[t]\) update rule,
-  - plug it into the existing LSS + top‑K pipeline,
-  - and reproduce DSFL’s experimental setup for MNIST, CIFAR‑10, and Speech Commands.
+View TensorBoard logs:
+```bash
+tensorboard --logdir=runs/
+```
 
-Once the adaptive K logic is fully wired, this README will be updated with precise configuration flags and plotting scripts for reproducing the FEDS vs. DSFL figures.
+Logged metrics include:
+- `accuracy_aggregated`, `loss_aggregated` - global model performance
+- `feds/k_mean`, `feds/k_std` - K value statistics
+- `feds/k_client_{i}` - per-client K values
+
+### 4. Analyze K Trajectory
+
+After training, visualize the adaptive K behavior:
+
+```bash
+python utils/visualize_k_trajectory.py --input feds_k_trajectory.json --output figures/
+```
+
+This generates:
+- `feds_k_trajectory.png` - Per-client K values over rounds
+- `feds_loss_k_correlation.png` - Loss improvement vs K change correlation
+- `feds_communication_savings.png` - Communication savings over time
+
+### 5. Validate FEDS
+
+Verify the adaptive mechanism is working:
+
+```bash
+python utils/validate_feds.py
+```
+
+## Configuration
+
+Key FEDS parameters in `utils/LayerWiseSparsification_feds.py`:
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `K_min` | `max(100, d//100)` | Minimum K (at least 1% of parameters) |
+| `K_max` | `d` | Maximum K (all parameters) |
+| `WARMUP_ROUNDS` | `5` | Static K rounds before adaptation starts |
+| `MOMENTUM` | `0.3` | EMA smoothing factor for K updates |
+| `ETA_BASE` | `1,000,000` | Base learning rate for K updates |
+| `ETA_DECAY` | `0.995` | Per-round decay factor for eta |
+
+## Output Files
+
+| File | Description |
+|------|-------------|
+| `feds_k_tracker.json` | Current K values, loss history, K history |
+| `feds_k_trajectory.json` | Full K trajectory for visualization |
+| `feds_history.json` | Server round tracking |
+| `runs/` | TensorBoard logs |
+
+## Research Context
+
+This work targets **IEEE Globecom 2026** and directly extends DSFL by replacing static K assignment with loss-feedback adaptation. See `docs/feds.md` for:
+- Full research proposal
+- Related work positioning
+- Experimental plan
+- Phase 2 roadmap (MAB extension for INFOCOM 2027)
+
+## Comparison with DSFL
+
+| Aspect | DSFL (Original) | FEDS (This Work) |
+|--------|-----------------|------------------|
+| K selection | Truncated normal distribution | Loss-feedback adaptive |
+| Hyperparameters | α, γ require per-dataset tuning | Single η with normalization |
+| K stability | Random sampling each round | Momentum-smoothed updates |
+| Early rounds | No special handling | Warmup phase |
+| Logging | Basic metrics | K trajectory + TensorBoard |
+
+## Citation
+
+```bibtex
+@inproceedings{masud2026feds,
+  title={Loss-Feedback Adaptive Sparsification for Communication-Efficient Federated Learning over Heterogeneous Wireless Networks},
+  author={Masud, Md Akmol and Lu, Ning},
+  booktitle={IEEE GLOBECOM},
+  year={2026}
+}
+```
 
 ## License
 
-Based on the original DSFL implementation; see the upstream license and paper for details. Any new FEDS-specific extensions in this repository follow the same license unless otherwise noted.
+Based on the original DSFL implementation by Mahdi Beitollahi. FEDS extensions follow the same license.

@@ -76,14 +76,16 @@ class Net(nn.Module):
         return x.squeeze()
 
 
-def train(net, trainloader, epochs,seed):
-    """Train the network on the training set."""
+def train(net, trainloader, epochs, seed):
+    """Train the network on the training set. Returns average loss."""
     criterion = torch.nn.CrossEntropyLoss()
     optimizer = torch.optim.SGD(net.parameters(), lr=0.1)
     new_sample_rate = 8000
-    sample_rate=16000
+    sample_rate = 16000
     transform = torchaudio.transforms.Resample(orig_freq=sample_rate, new_freq=new_sample_rate)
     net.train()
+    total_loss = 0.0
+    num_batches = 0
     for _ in range(epochs):
         for audio, labels in trainloader:
             audio, labels = audio.to(DEVICE), labels.to(DEVICE)
@@ -92,6 +94,9 @@ def train(net, trainloader, epochs,seed):
             loss = criterion(net(audio), labels)
             loss.backward()
             optimizer.step()
+            total_loss += loss.item()
+            num_batches += 1
+    return total_loss / num_batches if num_batches > 0 else 0.0
 
 
 def test(net, testloader):
@@ -288,12 +293,12 @@ def main():
 
         def fit(self, parameters, config):
             self.set_parameters(parameters)
-            train(net, trainloader,  5, self.args.seed,)
+            train_loss = train(net, trainloader, 5, self.args.seed)
 
             """Utilize the seed number as the IID number
             [Seed Number, Parameters]
             """
-            return self.get_parameters(), num_examples["trainset"], {}
+            return self.get_parameters(), num_examples["trainset"], {"train_loss": train_loss}
 
         def evaluate(self, parameters, config):
             self.set_parameters(parameters)

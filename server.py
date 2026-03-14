@@ -1,5 +1,5 @@
-import flwr 
-from typing import  Dict, List, Optional, Tuple
+import flwr
+from typing import Dict, List, Optional, Tuple
 from flwr.server.strategy import FedAvg
 from flwr.common import (
     FitRes,
@@ -14,11 +14,13 @@ from flwr.server.client_proxy import ClientProxy
 from functools import reduce
 import numpy as np
 import pickle
+import json
+import os
 import warnings
 from torch.utils.tensorboard import SummaryWriter
 import copy
 
-from dsfl import alastor, Flatten
+from dsfl_feds import alastor_feds, Flatten
 
 warnings.filterwarnings("ignore", category=UserWarning)
 
@@ -50,8 +52,8 @@ class History():
    
     
 
-def aggregateNew(results: List[Tuple[Weights, int]],client_id) -> Weights:
-    """Compute weighted average."""
+def aggregateNew(results: List[Tuple[Weights, int]], client_id, client_metrics=None) -> Weights:
+    """Compute weighted average with FEDS adaptive sparsification."""
     # Calculate the total number of examples used during training
     num_examples_total = sum([num_examples for _, num_examples in results])
 
@@ -59,40 +61,39 @@ def aggregateNew(results: List[Tuple[Weights, int]],client_id) -> Weights:
     weighted_weights = [
         [layer * 1 for layer in weights] for weights, num_examples in results
     ]
-    
-    #sort and match the id with weights
-    weighted_weights = [weights for _,weights in sorted(zip(client_id,weighted_weights),key=lambda pair: pair[0])]
 
-            
-    # print(weighted_weights)
-    # print(len(weighted_weights))
-    # [layer * num_examples for layer in weights] for weights, num_examples in results
-# ]
+    # Sort and match the id with weights
+    weighted_weights = [weights for _, weights in sorted(zip(client_id, weighted_weights), key=lambda pair: pair[0])]
 
+    # Sort metrics to match client order if provided
+    if client_metrics is not None:
+        client_metrics = [metrics for _, metrics in sorted(zip(client_id, client_metrics), key=lambda pair: pair[0])]
 
     history.update(weighted_weights)
-    with open("test", "wb") as fp:
-        pickle.dump(history.list, fp)
-    # Compute average weights of each layer
-    
+    # Save history for debugging (using JSON-safe format when possible)
+    try:
+        import json
+        with open("feds_history.json", "w") as fp:
+            json.dump({"round": history.round}, fp)
+    except Exception:
+        pass
+
     """ Saved File:
-        First Index: Round 
+        First Index: Round
         Second Index: User
         Third Index: Layer
     """
 
-    
-    """Alastor's function"""
-    weighted_weights_accu=copy.deepcopy(weighted_weights) 
-    weighted_weights=alastor(weighted_weights_accu, history)
- 
+    """FEDS adaptive sparsification with loss feedback"""
+    weighted_weights_accu = copy.deepcopy(weighted_weights)
+    weighted_weights = alastor_feds(weighted_weights_accu, history, client_metrics)
 
     """Aggregate"""
     weights_prime: Weights = [
-        reduce(np.add, layer_updates) / number_of_users #num_examples_total
+        reduce(np.add, layer_updates) / number_of_users  # num_examples_total
         for layer_updates in zip(*weighted_weights)
     ]
-    
+
     return weights_prime
 
 
@@ -102,14 +103,12 @@ if __name__ == "__main__":
     number_of_users=10
     
     history=History()
-    writer = SummaryWriter(comment= " MNIST - NIID - Dyn - alpha = 100, gamma = 10 - Test redo 0") 
-    # writer = SummaryWriter(comment= "Best - MNIST - Non-iid") 
-    # writer = SummaryWriter(comment= "Trying New Things")
+    writer = SummaryWriter(comment=" FEDS - MNIST - NIID - Adaptive K with Loss Feedback")
 
     #Extend class FedAVG
     class FedComp(FedAvg):
         
-        """Save and graph the aggregated loss and accuraies"""
+        """Save and graph the aggregated loss and accuracies, including FEDS K statistics"""
         def aggregate_evaluate(
         self,
         rnd: int,
@@ -119,12 +118,12 @@ if __name__ == "__main__":
             """Aggregate evaluation losses using weighted average."""
             if not results:
                 return None
-    
+
             # Weigh accuracy of each client by number of examples used
             accuracies = [r.metrics["accuracy"] * r.num_examples for _, r in results]
             loss = [r.loss * r.num_examples for _, r in results]
             examples = [r.num_examples for _, r in results]
-    
+
             # Aggregate and print custom metric
             accuracy_aggregated = sum(accuracies) / sum(examples)
             loss_aggregated = sum(loss) / sum(examples)
@@ -132,7 +131,26 @@ if __name__ == "__main__":
             print(f"Round {rnd} loss aggregated from client results: {loss_aggregated}")
             writer.add_scalar('accuracy_aggregated', accuracy_aggregated, rnd)
             writer.add_scalar('loss_aggregated', loss_aggregated, rnd)
-            
+
+            # Log FEDS K statistics to TensorBoard
+            try:
+                if os.path.exists('feds_k_tracker.json'):
+                    with open('feds_k_tracker.json', 'r') as f:
+                        k_tracker = json.load(f)
+                        k_list = k_tracker.get('k_list', [])
+                        if k_list:
+                            k_array = np.array(k_list)
+                            writer.add_scalar('feds/k_mean', k_array.mean(), rnd)
+                            writer.add_scalar('feds/k_std', k_array.std(), rnd)
+                            writer.add_scalar('feds/k_min', k_array.min(), rnd)
+                            writer.add_scalar('feds/k_max', k_array.max(), rnd)
+
+                            # Per-client K values (first 5 clients for readability)
+                            for i in range(min(5, len(k_list))):
+                                writer.add_scalar(f'feds/k_client_{i}', k_list[i], rnd)
+            except Exception as e:
+                print(f"Warning: Could not log K statistics: {e}")
+
             # Call aggregate_evaluate from base class (FedAvg)
             return super().aggregate_evaluate(rnd, results, failures)
                 
@@ -142,19 +160,24 @@ if __name__ == "__main__":
                 results: List[Tuple[ClientProxy, FitRes]],
                 failures: List[BaseException],
             ) -> Tuple[Optional[Parameters], Dict[str, Scalar]]:
-                """Aggregate fit results using weighted average."""
-                client_id=[int(client.cid[11:]) for client, _ in results]
+                """Aggregate fit results using weighted average with FEDS."""
+                client_id = [int(client.cid[11:]) for client, _ in results]
                 if not results:
                     return None, {}
                 # Do not aggregate if there are failures and failures are not accepted
                 if not self.accept_failures and failures:
                     return None, {}
-                # Convert results
+                # Convert results and extract metrics
                 weights_results = [
                     (parameters_to_weights(fit_res.parameters), fit_res.num_examples)
                     for client, fit_res in results
                 ]
-                return weights_to_parameters(aggregateNew(weights_results,client_id)), {}
+                # Extract per-client metrics (train_loss for FEDS adaptive K)
+                client_metrics = [
+                    dict(fit_res.metrics)
+                    for client, fit_res in results
+                ]
+                return weights_to_parameters(aggregateNew(weights_results, client_id, client_metrics)), {}
     
 
     # Set the initial model for reproducability
