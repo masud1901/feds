@@ -206,8 +206,8 @@ if __name__ == "__main__":
     
     # Define strategy (initial_parameters must be Parameters type in current Flower API)
     strategy = FedComp(
-        fraction_fit=1,
-        fraction_eval=1,
+        fraction_fit=1.0,
+        fraction_evaluate=1.0,
         min_fit_clients=number_of_users,
         min_available_clients=number_of_users,
         initial_parameters=ndarrays_to_parameters(initial_model[0][0]),

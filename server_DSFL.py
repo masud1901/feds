@@ -157,8 +157,8 @@ if __name__ == "__main__":
     history.updateError([[0]*len(Flatten(initial_model[0][0])[0]) for _ in range(number_of_users)])
 
     strategy = DSFLStrategy(
-        fraction_fit=1,
-        fraction_eval=1,
+        fraction_fit=1.0,
+        fraction_evaluate=1.0,
         min_fit_clients=number_of_users,
         min_available_clients=number_of_users,
         initial_parameters=ndarrays_to_parameters(initial_model[0][0]),
