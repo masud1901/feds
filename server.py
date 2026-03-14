@@ -6,9 +6,8 @@ from flwr.common import (
     EvaluateRes,
     Parameters,
     Scalar,
-    Weights,
-    parameters_to_weights,
-    weights_to_parameters,
+    parameters_to_ndarrays,
+    ndarrays_to_parameters,
 )
 from flwr.server.client_proxy import ClientProxy
 from functools import reduce
@@ -52,7 +51,7 @@ class History():
    
     
 
-def aggregateNew(results: List[Tuple[Weights, int]], client_id, client_metrics=None) -> Weights:
+def aggregateNew(results: List[Tuple[List[np.ndarray], int]], client_id, client_metrics=None) -> List[np.ndarray]:
     """Compute weighted average with FEDS adaptive sparsification."""
     # Calculate the total number of examples used during training
     num_examples_total = sum([num_examples for _, num_examples in results])
@@ -89,7 +88,7 @@ def aggregateNew(results: List[Tuple[Weights, int]], client_id, client_metrics=N
     weighted_weights = alastor_feds(weighted_weights_accu, history, client_metrics)
 
     """Aggregate"""
-    weights_prime: Weights = [
+    weights_prime: List[np.ndarray] = [
         reduce(np.add, layer_updates) / number_of_users  # num_examples_total
         for layer_updates in zip(*weighted_weights)
     ]
@@ -169,7 +168,7 @@ if __name__ == "__main__":
                     return None, {}
                 # Convert results and extract metrics
                 weights_results = [
-                    (parameters_to_weights(fit_res.parameters), fit_res.num_examples)
+                    (parameters_to_ndarrays(fit_res.parameters), fit_res.num_examples)
                     for client, fit_res in results
                 ]
                 # Extract per-client metrics (train_loss for FEDS adaptive K)
@@ -177,7 +176,7 @@ if __name__ == "__main__":
                     dict(fit_res.metrics)
                     for client, fit_res in results
                 ]
-                return weights_to_parameters(aggregateNew(weights_results, client_id, client_metrics)), {}
+                return ndarrays_to_parameters(aggregateNew(weights_results, client_id, client_metrics)), {}
     
 
     # Set the initial model for reproducability
@@ -188,14 +187,13 @@ if __name__ == "__main__":
     
     history.updateError([[0]*len(Flatten(initial_model[0][0])[0]) for _ in range(number_of_users)])
     
-    # Define strategy and 
+    # Define strategy (initial_parameters must be Parameters type in current Flower API)
     strategy = FedComp(
         fraction_fit=1,
         fraction_eval=1,
-        min_fit_clients=number_of_users,  # Minimum number of clients to be sampled for the next round
-        min_available_clients=number_of_users,  # Minimum number of clients that need to be connected to the server before a training round can start
-        initial_parameters=initial_model[0][0]
-
+        min_fit_clients=number_of_users,
+        min_available_clients=number_of_users,
+        initial_parameters=ndarrays_to_parameters(initial_model[0][0]),
     )
 
 
