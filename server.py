@@ -16,10 +16,20 @@ import pickle
 import json
 import os
 import warnings
-from torch.utils.tensorboard import SummaryWriter
+try:
+    from torch.utils.tensorboard import SummaryWriter
+except Exception:
+    SummaryWriter = None  # noqa: F811
+
 import copy
 
 from dsfl_feds import alastor_feds, Flatten
+
+
+class _NoOpWriter:
+    """No-op when TensorBoard is unavailable (e.g. Colab protobuf conflict)."""
+    def add_scalar(self, *args, **kwargs):
+        pass
 
 warnings.filterwarnings("ignore", category=UserWarning)
 
@@ -101,8 +111,15 @@ if __name__ == "__main__":
 
     number_of_users=10
     
-    history=History()
-    writer = SummaryWriter(comment=" FEDS - MNIST - NIID - Adaptive K with Loss Feedback")
+    history = History()
+    if SummaryWriter is not None:
+        try:
+            writer = SummaryWriter(comment=" FEDS - MNIST - NIID - Adaptive K with Loss Feedback")
+        except Exception as e:
+            print(f"TensorBoard disabled ({e}); metrics will not be logged to runs/.")
+            writer = _NoOpWriter()
+    else:
+        writer = _NoOpWriter()
 
     #Extend class FedAVG
     class FedComp(FedAvg):
