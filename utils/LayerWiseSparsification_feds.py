@@ -23,10 +23,10 @@ def layerSparsification(flatten_weights, history, oldseperation, metrics=None):
     num_user = len(flatten_weights)
     dynamic_sparsification = True  # If false we use the minimum of K
     
-    # ADAFL Adaptive K logic
+    # FEDS Adaptive K logic
     # Initialize or load K_i
     try:
-        with open('adafl_k_tracker.pickle', 'rb') as f:
+        with open('feds_k_tracker.pickle', 'rb') as f:
             k_tracker = pickle.load(f)
             k_list = k_tracker['k_list']
             prev_losses = k_tracker['prev_losses']
@@ -60,17 +60,17 @@ def layerSparsification(flatten_weights, history, oldseperation, metrics=None):
         # Tau is the average loss improvement in this round
         tau = np.mean(delta_L) if len(delta_L) > 0 else 0
         
-        # ADAFL Update Rule
+        # FEDS Update Rule
         for i in range(num_user):
             if type(k_list[i]) is list:
                  k_list[i] = sum(k_list[i]) # Flatten to scalar if needed
             k_list[i] = int(np.clip(k_list[i] - eta * (delta_L[i] - tau), K_min, K_max))
             
     # Save tracker
-    with open('adafl_k_tracker.pickle', 'wb') as f:
+    with open('feds_k_tracker.pickle', 'wb') as f:
         pickle.dump({'k_list': k_list, 'prev_losses': prev_losses}, f)
             
-    print("ADAFL Adaptive K values:", k_list)
+    print("FEDS Adaptive K values:", k_list)
     
     # If CKA is needed
     if iteration > 1:

@@ -6,9 +6,9 @@ from flwr.common import (
     EvaluateRes,
     Parameters,
     Scalar,
-    Weights,
-    parameters_to_weights,
-    weights_to_parameters,
+    NDArrays,
+    parameters_to_ndarrays,
+    ndarrays_to_parameters,
 )
 from flwr.server.client_proxy import ClientProxy
 from functools import reduce
@@ -18,7 +18,10 @@ import warnings
 from torch.utils.tensorboard import SummaryWriter
 import copy
 
-from dsfl import alastor_adafl, Flatten
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), 'utils'))
+from dsfl_feds import alastor_feds, Flatten
 
 warnings.filterwarnings("ignore", category=UserWarning)
 
@@ -50,7 +53,7 @@ class History():
    
     
 
-def aggregateNew(results: List[Tuple[Weights, int, dict]],client_id) -> Weights:
+def aggregateNew(results: List[Tuple[NDArrays, int, dict]],client_id) -> NDArrays:
     """Compute weighted average."""
     # Calculate the total number of examples used during training
     num_examples_total = sum([num_examples for _, num_examples, _ in results])
@@ -85,11 +88,11 @@ def aggregateNew(results: List[Tuple[Weights, int, dict]],client_id) -> Weights:
     
     """Alastor's function"""
     weighted_weights_accu=copy.deepcopy(weighted_weights) 
-    weighted_weights=alastor_adafl(weighted_weights_accu, history, metrics)
+    weighted_weights=alastor_feds(weighted_weights_accu, history, metrics)
  
 
     """Aggregate"""
-    weights_prime: Weights = [
+    weights_prime: NDArrays = [
         reduce(np.add, layer_updates) / number_of_users #num_examples_total
         for layer_updates in zip(*weighted_weights)
     ]
@@ -152,10 +155,10 @@ if __name__ == "__main__":
                     return None, {}
                 # Convert results
                 weights_results = [
-                    (parameters_to_weights(fit_res.parameters), fit_res.num_examples, fit_res.metrics)
+                    (parameters_to_ndarrays(fit_res.parameters), fit_res.num_examples, fit_res.metrics)
                     for client, fit_res in results
                 ]
-                return weights_to_parameters(aggregateNew(weights_results,client_id)), {}
+                return ndarrays_to_parameters(aggregateNew(weights_results,client_id)), {}
     
 
     # Set the initial model for reproducability
@@ -169,11 +172,10 @@ if __name__ == "__main__":
     # Define strategy and 
     strategy = FedComp(
         fraction_fit=1,
-        fraction_eval=1,
+        fraction_evaluate=1,
         min_fit_clients=number_of_users,  # Minimum number of clients to be sampled for the next round
         min_available_clients=number_of_users,  # Minimum number of clients that need to be connected to the server before a training round can start
-        initial_parameters=initial_model[0][0]
-
+        initial_parameters=flwr.common.ndarrays_to_parameters(initial_model[0][0])
     )
 
 
@@ -182,6 +184,6 @@ if __name__ == "__main__":
     # Start server
     flwr.server.start_server(
         server_address="localhost:8080",
-        config={"num_rounds": 300},
+        config=flwr.server.ServerConfig(num_rounds=300),
         strategy=strategy,
     )

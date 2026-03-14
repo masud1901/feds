@@ -12,7 +12,7 @@ module = types.ModuleType('FindingKSpeech')
 module.findK = lambda: [0.1]*10  # dummy return
 sys.modules['FindingKSpeech'] = module
 
-from utils.LayerWiseSparsification_adafl import layerSparsification
+from utils.LayerWiseSparsification_feds import layerSparsification
 
 class History:
     def __init__(self):
@@ -40,8 +40,8 @@ k_list = [500] * 10
 with open('K_alpha=10_gamma=10_test=0.pickle', 'wb') as f:
     pickle.dump(k_list, f)
     
-if os.path.exists('adafl_k_tracker.pickle'):
-    os.remove('adafl_k_tracker.pickle')
+if os.path.exists('feds_k_tracker.pickle'):
+    os.remove('feds_k_tracker.pickle')
 
 print("=== Round 1 (Initial Call) ===")
 layerSparsification(weights, history, oldseperation, metrics)

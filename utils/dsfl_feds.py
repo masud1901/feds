@@ -5,7 +5,7 @@ Created on Thu May  5 13:59:46 2022
 @author: Mahdi
 """
 import numpy as np
-from LayerWiseSparsification_adafl import layerSparsification
+from LayerWiseSparsification_feds import layerSparsification
 
 def Flatten(w_w):
     flatten_weighted_weights=np.array([])
@@ -36,7 +36,7 @@ def DeFlatten(f_w_w, map_shape):
 
 
 
-def alastor_adafl(Weights, history, metrics=None):
+def alastor_feds(Weights, history, metrics=None):
     
     flatten_weighted_weights= [Flatten(user)[0] for user in Weights[:]]
     map_shape=Flatten(Weights[0])[1]

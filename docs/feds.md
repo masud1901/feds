@@ -18,7 +18,7 @@ Queen's University, Kingston, Ontario, Canada
 
 Federated learning (FL) systems deployed over bandwidth-constrained wireless networks face a fundamental tension: clients must transmit model updates frequently, but their communication capacity varies dynamically across rounds. DSFL (Dynamic Sparsification for FL, Beitollahi et al., ICCSPA 2022) partially addresses this by introducing a two-level sparsification pipeline — Layer-wise Similarity Sparsification (LSS) using CKA and per-client top-K — but assigns each client's sparsification rate K from a fixed, pre-specified statistical distribution. This static assumption is the core limitation we attack.
 
-We propose **ADAFL** (Adaptive Sparsification for Federated Learning): a loss-feedback driven mechanism that adjusts each client's K dynamically using only the training signal already present in DSFL's pipeline, requiring zero additional communication overhead. When a client's local loss improves significantly, the algorithm allows it to compress more aggressively in the next round; when loss stagnates, compression is relaxed to send richer updates. This closes the gap DSFL explicitly leaves as future work, is implementable directly from Mahdi Beitollahi's publicly available codebase, and fits naturally within Prof. Lu's research agenda bridging DSFL and the bandit-based scheduling work of Juaren Steiger.
+We propose **FEDS** (Adaptive Sparsification for Federated Learning): a loss-feedback driven mechanism that adjusts each client's K dynamically using only the training signal already present in DSFL's pipeline, requiring zero additional communication overhead. When a client's local loss improves significantly, the algorithm allows it to compress more aggressively in the next round; when loss stagnates, compression is relaxed to send richer updates. This closes the gap DSFL explicitly leaves as future work, is implementable directly from Mahdi Beitollahi's publicly available codebase, and fits naturally within Prof. Lu's research agenda bridging DSFL and the bandit-based scheduling work of Juaren Steiger.
 
 ---
 
@@ -34,11 +34,11 @@ This proposal sits at the direct intersection of two completed research threads 
 | FLAC | GLOBECOM 2022 (Beitollahi) | Autoencoder compression with convergence guarantee | Different mechanism; no adaptation of K |
 | POSS | INFOCOM 2023 (Steiger) | Constrained bandit framework with switching costs | No FL compression component |
 | Backlogged Bandits | INFOCOM 2024 (Steiger) | Queueing + bandit formulation for network scheduling | No FL compression component |
-| **This work (ADAFL)** | GLOBECOM 2026 (Masud) | Loss-feedback adaptive K within DSFL's LSS+top-K pipeline | MAB extension (Phase 2, INFOCOM 2027) |
+| **This work (FEDS)** | GLOBECOM 2026 (Masud) | Loss-feedback adaptive K within DSFL's LSS+top-K pipeline | MAB extension (Phase 2, INFOCOM 2027) |
 
 ### 2.2 The Publication Gap and Opportunity
 
-Mahdi Beitollahi left Queen's in late 2022 for Huawei Noah's Ark Lab Montreal, where his work pivoted entirely to foundation models and federated unlearning. Juaren Steiger completed his PhD in 2024–2025 and is now a postdoctoral researcher at Penn State. Prof. Lu's lab has a 2+ year gap in FL communication-efficiency publications. ADAFL directly restarts this thread — arriving at Queen's with a submission already in review demonstrates precisely the kind of proactive research readiness that accelerates a master's program into a PhD trajectory.
+Mahdi Beitollahi left Queen's in late 2022 for Huawei Noah's Ark Lab Montreal, where his work pivoted entirely to foundation models and federated unlearning. Juaren Steiger completed his PhD in 2024–2025 and is now a postdoctoral researcher at Penn State. Prof. Lu's lab has a 2+ year gap in FL communication-efficiency publications. FEDS directly restarts this thread — arriving at Queen's with a submission already in review demonstrates precisely the kind of proactive research readiness that accelerates a master's program into a PhD trajectory.
 
 ---
 
@@ -56,11 +56,11 @@ DSFL's authors explicitly acknowledge this in the conclusion: *"it is still unkn
 
 ---
 
-## 4. Proposed Method: ADAFL
+## 4. Proposed Method: FEDS
 
 ### 4.1 Core Idea
 
-ADAFL replaces DSFL's static K-sampling with a feedback-driven update rule. The intuition is simple: if a client's local loss improved substantially in round *t*, its current update was informative — it can afford to compress more next round. If loss barely changed, the update was weak — send richer data by relaxing compression.
+FEDS replaces DSFL's static K-sampling with a feedback-driven update rule. The intuition is simple: if a client's local loss improved substantially in round *t*, its current update was informative — it can afford to compress more next round. If loss barely changed, the update was weak — send richer data by relaxing compression.
 
 **K<sub>i</sub>[*t*+1] = clip( K<sub>i</sub>[*t*] - η · (ΔL<sub>i</sub>[*t*] − τ), K<sub>min</sub>, K<sub>max</sub> )**
 
@@ -68,9 +68,9 @@ where **ΔL<sub>i</sub>[*t*] = L<sub>i</sub>[*t*−1] − L<sub>i</sub>[*t*]** i
 
 ### 4.2 Integration with DSFL's Pipeline
 
-ADAFL plugs into DSFL's existing Algorithm 1 with a single modification — replacing line 14 (K<sub>i</sub> = C<sub>i</sub>[*t*]) with the adaptive rule above. The rest of the pipeline — LSS masking, top-K sparsification, error accumulation, and weighted aggregation — remains unchanged. This is a minimal surgical change that preserves all of DSFL's theoretical and engineering properties while adding the adaptive layer.
+FEDS plugs into DSFL's existing Algorithm 1 with a single modification — replacing line 14 (K<sub>i</sub> = C<sub>i</sub>[*t*]) with the adaptive rule above. The rest of the pipeline — LSS masking, top-K sparsification, error accumulation, and weighted aggregation — remains unchanged. This is a minimal surgical change that preserves all of DSFL's theoretical and engineering properties while adding the adaptive layer.
 
-| DSFL Step | DSFL Original | ADAFL Modification |
+| DSFL Step | DSFL Original | FEDS Modification |
 |-----------|---------------|---------------------|
 | Line 7 | Download global model *w*[*t*] | Same — unchanged |
 | Line 8 | Perform E local updates | Same — additionally record L<sub>i</sub>[*t*] |
@@ -81,15 +81,15 @@ ADAFL plugs into DSFL's existing Algorithm 1 with a single modification — repl
 
 ### 4.3 Why This Works: Intuition
 
-Consider two clients in round *t*. **Client A** (high heterogeneity, poor channel) achieves ΔL<sub>A</sub> = 0.01, well below threshold τ = 0.05. ADAFL *increases* K<sub>A</sub> (since ΔL - τ is negative) — client A sends **denser** updates (more parameters) next round to catch up. **Client B** (well-aligned data, good channel) achieves ΔL<sub>B</sub> = 0.12, above threshold. ADAFL *decreases* K<sub>B</sub> — client B is learning well and can afford to send **sparser** (fewer parameters) updates without hurting convergence. Over many rounds, each client's K settles near the level appropriate for its current condition without any manual tuning.
+Consider two clients in round *t*. **Client A** (high heterogeneity, poor channel) achieves ΔL<sub>A</sub> = 0.01, well below threshold τ = 0.05. FEDS *increases* K<sub>A</sub> (since ΔL - τ is negative) — client A sends **denser** updates (more parameters) next round to catch up. **Client B** (well-aligned data, good channel) achieves ΔL<sub>B</sub> = 0.12, above threshold. FEDS *decreases* K<sub>B</sub> — client B is learning well and can afford to send **sparser** (fewer parameters) updates without hurting convergence. Over many rounds, each client's K settles near the level appropriate for its current condition without any manual tuning.
 
 ---
 
 ## 5. Related Work and Differentiation
 
-The FL communication efficiency space is crowded. The following table positions ADAFL precisely against the closest existing work, all of which we identified through systematic literature search.
+The FL communication efficiency space is crowded. The following table positions FEDS precisely against the closest existing work, all of which we identified through systematic literature search.
 
-| Prior Work | Venue | What It Does | How ADAFL Differs |
+| Prior Work | Venue | What It Does | How FEDS Differs |
 |------------|-------|--------------|-------------------|
 | DSFL (Beitollahi et al.) | ICCSPA 2022 | LSS + top-K sparsification; K from truncated normal | We make K adaptive via loss feedback — DSFL's own future work |
 | Han et al. | ICDCS 2020 | Adaptive GS via online learning; non-IID aware | No MAB, no per-client K, no LSS layer-awareness |
@@ -101,13 +101,13 @@ The FL communication efficiency space is crowded. The following table positions 
 | FedLUAR | arXiv 2025 | Server-side layer recycling of sparse updates | Server-side intervention; different mechanism; no adaptive K |
 | CS-UCB (Xia et al.) | IEEE TWC 2020 | MAB for client scheduling (who participates) | Scheduling ≠ compression rate; we select how much to compress |
 
-The critical gap ADAFL fills: no existing work applies a training-signal-driven adaptive K update within DSFL's LSS + top-K pipeline. DGCSFL comes closest (loss-driven K) but abandons LSS and combines it with client selection, making it a different system. ADAFL is the natural, minimal extension of DSFL that its own authors called for.
+The critical gap FEDS fills: no existing work applies a training-signal-driven adaptive K update within DSFL's LSS + top-K pipeline. DGCSFL comes closest (loss-driven K) but abandons LSS and combines it with client selection, making it a different system. FEDS is the natural, minimal extension of DSFL that its own authors called for.
 
 ---
 
 ## 6. Experimental Plan
 
-**Benchmarking principle:** We use the **exact same experimental setting as DSFL** (Beitollahi et al., ICCSPA 2022) so that ADAFL and DSFL are compared fairly. This ensures reproducibility and allows reviewers to judge the gain from adaptive K alone, without confounding factors from different datasets, capacity models, or partitioning.
+**Benchmarking principle:** We use the **exact same experimental setting as DSFL** (Beitollahi et al., ICCSPA 2022) so that FEDS and DSFL are compared fairly. This ensures reproducibility and allows reviewers to judge the gain from adaptive K alone, without confounding factors from different datasets, capacity models, or partitioning.
 
 ### 6.1 Datasets and Models (Same as DSFL)
 
@@ -132,7 +132,7 @@ All three datasets and architectures are taken directly from DSFL's paper and co
 | DSFL (truncated normal K) | Direct predecessor — primary comparison |
 | Han et al. adaptive GS | Best non-bandit adaptive method; if code unavailable, compare to reported numbers |
 | Random K assignment | Shows benefit of feedback vs. random policy |
-| **ADAFL (ours)** | Proposed method |
+| **FEDS (ours)** | Proposed method |
 
 ### 6.4 Metrics
 
@@ -147,7 +147,7 @@ We replicate DSFL's **exact** setup for fair benchmarking. In DSFL, each client 
 
 **C<sub>i</sub>[*t*] ~ Truncated-Normal(μ = *d*/α, σ = *d*/γ, *a* = 0, *b* = *d*)**
 
-(*d* = model dimension; α, γ = fixed scalars.) We use the **same** datasets, architectures, non-IID partition, learning rate, local epochs (E = 1 for MNIST/CIFAR-10, E = 5 for Speech), and **same α, γ and random seeds** when running DSFL so that DSFL's results are reproducible and match the paper. For **ADAFL**, we keep everything identical except: instead of K<sub>i</sub>[*t*] = C<sub>i</sub>[*t*], we use the loss-feedback rule with K<sub>i</sub>[*t*] ∈ [K<sub>min</sub>, K<sub>max</sub>] and K<sub>min</sub>, K<sub>max</sub> chosen to span the same range (e.g. [0, *d*] or consistent with the truncated normal). This isolates the effect of adaptive K. Optional (if time): vary α, γ to show robustness.
+(*d* = model dimension; α, γ = fixed scalars.) We use the **same** datasets, architectures, non-IID partition, learning rate, local epochs (E = 1 for MNIST/CIFAR-10, E = 5 for Speech), and **same α, γ and random seeds** when running DSFL so that DSFL's results are reproducible and match the paper. For **FEDS**, we keep everything identical except: instead of K<sub>i</sub>[*t*] = C<sub>i</sub>[*t*], we use the loss-feedback rule with K<sub>i</sub>[*t*] ∈ [K<sub>min</sub>, K<sub>max</sub>] and K<sub>min</sub>, K<sub>max</sub> chosen to span the same range (e.g. [0, *d*] or consistent with the truncated normal). This isolates the effect of adaptive K. Optional (if time): vary α, γ to show robustness.
 
 ---
 
@@ -155,27 +155,27 @@ We replicate DSFL's **exact** setup for fair benchmarking. In DSFL, each client 
 
 For a 6-page Globecom submission, a full convergence proof is not expected. The theoretical contribution is framed as follows:
 
-**Claim:** Under the same assumptions as DSFL (bounded gradient dissimilarity, Lipschitz-smooth local objectives, bounded variance), ADAFL's adaptive K policy satisfies the sparsification conditions required for DSFL's convergence argument to hold. Specifically, the clipping operation in the K-update rule ensures K<sub>i</sub>[*t*] ∈ [K<sub>min</sub>, K<sub>max</sub>] at all times, preserving the bounded compression property DSFL's analysis requires. The loss-feedback term introduces a bias toward K values that historically correlated with progress, but does not violate the stochastic approximation conditions.
+**Claim:** Under the same assumptions as DSFL (bounded gradient dissimilarity, Lipschitz-smooth local objectives, bounded variance), FEDS's adaptive K policy satisfies the sparsification conditions required for DSFL's convergence argument to hold. Specifically, the clipping operation in the K-update rule ensures K<sub>i</sub>[*t*] ∈ [K<sub>min</sub>, K<sub>max</sub>] at all times, preserving the bounded compression property DSFL's analysis requires. The loss-feedback term introduces a bias toward K values that historically correlated with progress, but does not violate the stochastic approximation conditions.
 
-This is not a new theorem — it is a verification that ADAFL's modification does not break DSFL's existing guarantee. The full convergence analysis of ADAFL under dynamic K, including the effect of the feedback rule on the error accumulation term, is explicitly deferred to the journal extension (Phase 2). This is standard and accepted practice for Globecom papers.
+This is not a new theorem — it is a verification that FEDS's modification does not break DSFL's existing guarantee. The full convergence analysis of FEDS under dynamic K, including the effect of the feedback rule on the error accumulation term, is explicitly deferred to the journal extension (Phase 2). This is standard and accepted practice for Globecom papers.
 
-The MAB extension (Phase 2) will then add formal regret bounds, borrowing from Steiger's POSS framework and Vaishnav's Budgeted UCB for the capacity-constrained setting. ADAFL's loss-feedback rule is designed to be a natural precursor to a UCB formulation: the ΔL<sub>i</sub>[*t*] signal that drives the K-update in ADAFL is the same signal that would serve as reward feedback in a bandit formulation.
+The MAB extension (Phase 2) will then add formal regret bounds, borrowing from Steiger's POSS framework and Vaishnav's Budgeted UCB for the capacity-constrained setting. FEDS's loss-feedback rule is designed to be a natural precursor to a UCB formulation: the ΔL<sub>i</sub>[*t*] signal that drives the K-update in FEDS is the same signal that would serve as reward feedback in a bandit formulation.
 
 ---
 
 ## 8. Globecom Positioning and Scope Guardrails
 
-**Conference fit.** ADAFL is intentionally scoped as a **Globecom-style, communications-centric extension** of DSFL. The paper keeps:
+**Conference fit.** FEDS is intentionally scoped as a **Globecom-style, communications-centric extension** of DSFL. The paper keeps:
 
 - **Exactly the same system model and experimental setup as DSFL** (datasets, architectures, non-IID partition, truncated-normal capacity model, Flower implementation).
 - **Exactly the same sparsification pipeline** (LSS + top-K + error accumulation), changing only how the per-client sparsification rate K is chosen.
 
-This framing makes it clear to reviewers that ADAFL is a **minimal, well-controlled modification** answering DSFL’s own future-work question about how to exploit the correlation between training signal and communication rate.
+This framing makes it clear to reviewers that FEDS is a **minimal, well-controlled modification** answering DSFL’s own future-work question about how to exploit the correlation between training signal and communication rate.
 
 **Core novelty claim for Globecom.** The contribution should be stated narrowly and precisely:
 
 - DSFL: **K<sub>i</sub>[t] is drawn once per round from a fixed truncated normal distribution**, independent of training signal and never updated.
-- ADAFL: **K<sub>i</sub>[t] becomes a loss-feedback-driven state variable on each client**, updated as
+- FEDS: **K<sub>i</sub>[t] becomes a loss-feedback-driven state variable on each client**, updated as
   \(K_i[t+1] = \text{clip}\big(K_i[t] + \eta(\Delta L_i[t] - \tau), K_{\min}, K_{\max}\big)\)
   using **only local loss information and no extra communication**.
 
@@ -184,18 +184,18 @@ The headline should emphasize **better accuracy-per-bit and robustness under het
 **Experimental bar for acceptance.** Because the idea is incremental, the experiments must be:
 
 - **Strictly comparable to DSFL**: same seeds, same capacity draws, same training hyperparameters, and same number of clients; only the K-selection rule changes.
-- **Communication-centric**: plots of **test accuracy vs. global rounds** and **test accuracy vs. total transmitted bits** must show a **clear, consistent gap** between ADAFL and FedAvg (no compression), fixed top-K, DSFL (truncated-normal K), and optionally random-K.
+- **Communication-centric**: plots of **test accuracy vs. global rounds** and **test accuracy vs. total transmitted bits** must show a **clear, consistent gap** between FEDS and FedAvg (no compression), fixed top-K, DSFL (truncated-normal K), and optionally random-K.
 - **Light but targeted ablations**: at most one small figure exploring sensitivity to \(\eta\), \(\tau\), or \([K_{\min}, K_{\max}]\), to avoid bloating the paper.
 
 **Theory level appropriate for 6 pages.**
 
-- The theoretical section should **only verify that ADAFL preserves DSFL’s convergence assumptions** (bounded compression via clipping, bounded gradient dissimilarity, etc.).
+- The theoretical section should **only verify that FEDS preserves DSFL’s convergence assumptions** (bounded compression via clipping, bounded gradient dissimilarity, etc.).
 - Acknowledge explicitly that **full analysis of dynamic K and the feedback loop is deferred to the Phase-2 journal/INFOCOM extension**, where regret bounds and a bandit formulation will be developed.
 
 **Scope guardrails vs. INFOCOM.**
 
 - **Globecom (this paper):** practical, loss-feedback heuristic inside DSFL; focus on system design and communication-efficiency gains.
-- **INFOCOM / journal (Phase 2):** formalize ADAFL as a **bandit-driven compression policy (MAB-DSFL)** on top of Steiger’s POSS framework, with regret and convergence analysis and potentially joint scheduling+compression.
+- **INFOCOM / journal (Phase 2):** formalize FEDS as a **bandit-driven compression policy (MAB-DSFL)** on top of Steiger’s POSS framework, with regret and convergence analysis and potentially joint scheduling+compression.
 
 This separation prevents the Globecom paper from becoming over-ambitious while clearly signaling a rich, theory-heavy follow-up line for reviewers.
 
@@ -206,27 +206,27 @@ This separation prevents the Globecom paper from becoming over-ambitious while c
 | Days | Focus | Deliverable |
 |------|-------|-------------|
 | 1–2 | Lock system model and algorithm. Read DGCSFL + Han et al. Write related-work paragraph. Pin down τ and η defaults. Replicate DSFL's exact setup (datasets, capacity, non-IID). | Algorithm pseudocode (final) |
-| 3–5 | Implement ADAFL in Mahdi's codebase. Replace K = C<sub>i</sub>[*t*] with loss-feedback rule. Use same capacity sampling as DSFL. Test on MNIST (same architecture and non-IID as DSFL). | Working code, first MNIST result |
-| 6–8 | Run CIFAR-10 and Speech Commands with same DSFL settings. Full baseline suite on MNIST: DSFL, fixed top-K, ADAFL, FedAvg (no compression). | Main result figures (all three datasets) |
-| 9–11 | Generate accuracy vs. rounds, accuracy vs. total bits transmitted, K-trajectory per client. Same seeds and capacity draws for DSFL vs ADAFL for fair comparison. | All experiment figures |
+| 3–5 | Implement FEDS in Mahdi's codebase. Replace K = C<sub>i</sub>[*t*] with loss-feedback rule. Use same capacity sampling as DSFL. Test on MNIST (same architecture and non-IID as DSFL). | Working code, first MNIST result |
+| 6–8 | Run CIFAR-10 and Speech Commands with same DSFL settings. Full baseline suite on MNIST: DSFL, fixed top-K, FEDS, FedAvg (no compression). | Main result figures (all three datasets) |
+| 9–11 | Generate accuracy vs. rounds, accuracy vs. total bits transmitted, K-trajectory per client. Same seeds and capacity draws for DSFL vs FEDS for fair comparison. | All experiment figures |
 | 12–14 | Write full paper draft: intro, related work, system model, algorithm, experiments (DSFL-matched setup), conclusion. | Complete draft (6 pages) |
 | 15–17 | Revise draft. Add K-trajectory visualization. Insert theoretical positioning section. | Revised draft |
 | 18–19 | Final polish. IEEE two-column format. Proofread. Submit. | Submitted PDF |
 
 ---
 
-## 9. Phase 2 Roadmap: From ADAFL to MAB-DSFL
+## 9. Phase 2 Roadmap: From FEDS to MAB-DSFL
 
-ADAFL is deliberately designed as the first step in a two-phase research arc. The loss-feedback adaptive K in Phase 1 lays the groundwork for a full MAB formulation in Phase 2.
+FEDS is deliberately designed as the first step in a two-phase research arc. The loss-feedback adaptive K in Phase 1 lays the groundwork for a full MAB formulation in Phase 2.
 
 | Phase | Target | Deadline | Core Addition Over Previous Phase |
 |-------|--------|----------|-----------------------------------|
-| Phase 1: ADAFL | Globecom 2026 | April 1, 2026 | Loss-feedback adaptive K within DSFL pipeline |
+| Phase 1: FEDS | Globecom 2026 | April 1, 2026 | Loss-feedback adaptive K within DSFL pipeline |
 | Phase 2A: Journal | IEEE ToN or TNNLS | ~Aug 2026 | Full convergence proof + regret analysis + more datasets |
 | Phase 2B: MAB-DSFL | INFOCOM 2027 | July 24, 2026 | Replace feedback rule with UCB bandit + Steiger's POSS framework |
 | Phase 3 (future) | IEEE JSAC or NeurIPS | 2027+ | Joint scheduling (HeteRo-Select) + compression (MAB-DSFL) |
 
-The key design decision: ADAFL's ΔL<sub>i</sub>[*t*] signal is the natural reward signal for a MAB formulation in Phase 2B. When the Slivkins MAB framework is fully internalized, the UCB extension of ADAFL becomes a straightforward formalization of what ADAFL already does heuristically — replacing the deterministic feedback rule with a principled exploration-exploitation policy. This makes Phase 2B a genuine theoretical upgrade of Phase 1, not a different paper.
+The key design decision: FEDS's ΔL<sub>i</sub>[*t*] signal is the natural reward signal for a MAB formulation in Phase 2B. When the Slivkins MAB framework is fully internalized, the UCB extension of FEDS becomes a straightforward formalization of what FEDS already does heuristically — replacing the deterministic feedback rule with a principled exploration-exploitation policy. This makes Phase 2B a genuine theoretical upgrade of Phase 1, not a different paper.
 
 ---
 
@@ -234,11 +234,11 @@ The key design decision: ADAFL's ΔL<sub>i</sub>[*t*] signal is the natural rewa
 
 This proposal is consciously designed to land at the intersection of all three of Prof. Lu's major published contributions:
 
-- **FL Compression Thread:** DSFL / FLAC (Globecom 2022): ADAFL is a direct extension of Mahdi's work. Prof. Lu knows the codebase, the assumptions, and the experimental setup intimately.
-- **Bandit Scheduling Thread:** POSS / Backlogged Bandits (INFOCOM 2023/2024): Phase 2B maps ADAFL's feedback rule onto Steiger's bandit framework. The theoretical tools are already in the lab.
-- **Wireless Systems Expertise:** Prof. Lu's background in real-time scheduling and wireless systems makes him uniquely positioned to validate the communication model and the Globecom framing of ADAFL (with scope for real-channel or time-varying models in Phase 2).
+- **FL Compression Thread:** DSFL / FLAC (Globecom 2022): FEDS is a direct extension of Mahdi's work. Prof. Lu knows the codebase, the assumptions, and the experimental setup intimately.
+- **Bandit Scheduling Thread:** POSS / Backlogged Bandits (INFOCOM 2023/2024): Phase 2B maps FEDS's feedback rule onto Steiger's bandit framework. The theoretical tools are already in the lab.
+- **Wireless Systems Expertise:** Prof. Lu's background in real-time scheduling and wireless systems makes him uniquely positioned to validate the communication model and the Globecom framing of FEDS (with scope for real-channel or time-varying models in Phase 2).
 
-The proposed email to Prof. Lu should present ADAFL not as a new idea from outside but as the natural bridge between his two existing threads — which is precisely what it is.
+The proposed email to Prof. Lu should present FEDS not as a new idea from outside but as the natural bridge between his two existing threads — which is precisely what it is.
 
 ---
 
@@ -246,10 +246,10 @@ The proposed email to Prof. Lu should present ADAFL not as a new idea from outsi
 
 | Section | Content | Est. Length |
 |---------|---------|-------------|
-| I. Introduction | FL communication bottleneck; DSFL as prior work; static K as the gap; ADAFL as the fix; contributions | ~0.7 pages |
+| I. Introduction | FL communication bottleneck; DSFL as prior work; static K as the gap; FEDS as the fix; contributions | ~0.7 pages |
 | II. Related Work | DSFL lineage; adaptive sparsification landscape; differentiation table (condensed) | ~0.5 pages |
 | III. System Model | FL setup; communication model (same as DSFL: truncated normal capacity); DSFL pipeline recap | ~0.5 pages |
-| IV. ADAFL Algorithm | Adaptive K rule; integration with DSFL Algorithm 1; pseudocode; theoretical positioning | ~1.0 pages |
+| IV. FEDS Algorithm | Adaptive K rule; integration with DSFL Algorithm 1; pseudocode; theoretical positioning | ~1.0 pages |
 | V. Experimental Results | MNIST, CIFAR-10, Speech (DSFL setting); accuracy vs. rounds; accuracy vs. bits; K-trajectory; ablation of η and τ | ~2.5 pages |
 | VI. Conclusion | Summary; limitations; Phase 2 MAB extension preview | ~0.3 pages |
 

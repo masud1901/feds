@@ -184,7 +184,7 @@ def main():
             self.Global_round=0
             self.args=args
             
-        def get_parameters(self):
+        def get_parameters(self, config=None):
             return [val.cpu().numpy() for _, val in net.state_dict().items()]
 
         def set_parameters(self, parameters):
@@ -207,7 +207,7 @@ def main():
             return float(loss), num_examples["testset"], {"accuracy": float(accuracy)}
 
     # Start client
-    fl.client.start_numpy_client("localhost:8080", client=CifarClient(args))
+    fl.client.start_numpy_client(server_address="localhost:8080", client=CifarClient(args))
 
 
 if __name__ == "__main__":
