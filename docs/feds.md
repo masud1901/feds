@@ -1,3 +1,4 @@
+<!-- markdownlint-disable MD033 -->
 # RESEARCH PROPOSAL
 
 ## Loss-Feedback Adaptive Sparsification for Communication-Efficient Federated Learning over Heterogeneous Wireless Networks
@@ -10,7 +11,7 @@
 Incoming M.A.Sc. Student, Department of Electrical and Computer Engineering  
 Queen's University, Kingston, Ontario, Canada  
 
-*Supervisor: Prof. Ning Lu (Canada Research Chair, Tier 2, Future Communication Networks)*
+Supervisor: Prof. Ning Lu (Canada Research Chair, Tier 2, Future Communication Networks)
 
 ---
 
@@ -65,6 +66,44 @@ FEDS replaces DSFL's static K-sampling with a feedback-driven update rule. The i
 **K<sub>i</sub>[*t*+1] = clip( K<sub>i</sub>[*t*] - η · (ΔL<sub>i</sub>[*t*] − τ), K<sub>min</sub>, K<sub>max</sub> )**
 
 where **ΔL<sub>i</sub>[*t*] = L<sub>i</sub>[*t*−1] − L<sub>i</sub>[*t*]** is the local loss improvement of client *i* in round *t*, τ is a threshold (target improvement rate), η is a learning rate for the K-update, and K<sub>min</sub>, K<sub>max</sub> define the feasible compression range. This update runs entirely on the client using locally available information — no additional communication to the server is required. Note the negative sign: larger loss improvements lead to *greater* compression (smaller K).
+
+### 4.1.1 Enhanced Update Mechanism
+
+The implementation includes several enhancements for stability and robustness:
+
+**Relative Loss Improvement:** Instead of raw loss differences, we use relative improvement:
+
+```text
+ΔL_i[t] = (L_i[t-1] - L_i[t]) / L_i[t-1]
+```
+
+This normalizes across different loss scales (e.g., CIFAR vs. MNIST).
+
+**Z-Score Normalization:** The loss improvements are normalized by their cross-client standard deviation:
+
+```text
+normalized_ΔL_i = (ΔL_i - τ) / std(ΔL)
+```
+
+This makes the learning rate η dataset-agnostic — a single value works across MNIST, CIFAR-10, and Speech Commands.
+
+**Momentum Smoothing:** K updates are smoothed using exponential moving average (β = 0.3):
+
+```text
+K_i[t+1] = K_i[t] + β · raw_update + (1-β) · (K_i[t] - K_i[t-1])
+```
+
+This prevents wild oscillations when individual rounds have noisy loss measurements.
+
+**Adaptive Learning Rate Decay:** The learning rate η decays over rounds:
+
+```text
+η[t] = η_base · 0.995^t
+```
+
+Allows fine-grained adaptation early in training while stabilizing in later rounds.
+
+**Warmup Phase:** The first 5 rounds use static K values (from DSFL's distribution) before enabling the adaptive mechanism. This avoids unstable adaptation before loss signals become reliable.
 
 ### 4.2 Integration with DSFL's Pipeline
 
@@ -140,8 +179,22 @@ All three datasets and architectures are taken directly from DSFL's paper and co
 - Test accuracy vs. total bits transmitted (primary Globecom metric)
 - Convergence round to reach target accuracy (e.g. 90% on MNIST)
 - K trajectory per client over rounds (to visualize adaptive behavior)
+- Communication savings percentage (vs. full transmission)
+- Loss improvement vs. K change correlation (validates feedback mechanism)
 
-### 6.5 Capacity / Communication Model (Same as DSFL)
+### 6.5 Visualization Tools
+
+We developed dedicated visualization scripts for paper figures:
+
+| Figure | Script | Description |
+| ------ | ------ | ----------- |
+| K trajectory | `utils/visualize_k_trajectory.py` | Per-client K values over training rounds |
+| Loss-K correlation | `utils/visualize_k_trajectory.py` | Scatter plot of ΔL vs. ΔK with correlation coefficient |
+| Communication savings | `utils/visualize_k_trajectory.py` | Percentage of bits saved vs. full transmission |
+
+These scripts read from `feds_k_trajectory.json` which is automatically generated during training.
+
+### 6.6 Capacity / Communication Model (Same as DSFL)
 
 We replicate DSFL's **exact** setup for fair benchmarking. In DSFL, each client *i*'s sparsification budget at round *t* is **K<sub>i</sub>[*t*] = C<sub>i</sub>[*t*]**, where C<sub>i</sub>[*t*] is sampled from:
 
@@ -201,21 +254,48 @@ This separation prevents the Globecom paper from becoming over-ambitious while c
 
 ---
 
-## 9. 19-Day Execution Plan
+## 9. Implementation Status and Execution Plan
+
+### 9.1 Completed Implementation
+
+The following components are fully implemented and tested:
+
+| Component | Status | Details |
+| --------- | ------ | ------- |
+| Client training loss reporting | ✅ Done | All three clients (MNIST, CIFAR, Speech) return `train_loss` in metrics |
+| Server metrics pipeline | ✅ Done | `aggregate_fit` extracts and passes per-client metrics to sparsification |
+| FEDS adaptive K mechanism | ✅ Done | Relative loss improvement, z-score normalization, momentum, decay |
+| Warmup phase | ✅ Done | 5 rounds of static K before adaptation begins |
+| K trajectory logging | ✅ Done | JSON-based persistence with full history |
+| TensorBoard K logging | ✅ Done | `feds/k_mean`, `feds/k_std`, per-client K values |
+| Visualization scripts | ✅ Done | `visualize_k_trajectory.py` generates publication figures |
+| Validation script | ✅ Done | `validate_feds.py` verifies mechanism correctness |
+| README documentation | ✅ Done | Complete usage guide with configuration table |
+
+### 9.2 Remaining Execution Plan
 
 | Days | Focus | Deliverable |
 |------|-------|-------------|
-| 1–2 | Lock system model and algorithm. Read DGCSFL + Han et al. Write related-work paragraph. Pin down τ and η defaults. Replicate DSFL's exact setup (datasets, capacity, non-IID). | Algorithm pseudocode (final) |
-| 3–5 | Implement FEDS in Mahdi's codebase. Replace K = C<sub>i</sub>[*t*] with loss-feedback rule. Use same capacity sampling as DSFL. Test on MNIST (same architecture and non-IID as DSFL). | Working code, first MNIST result |
-| 6–8 | Run CIFAR-10 and Speech Commands with same DSFL settings. Full baseline suite on MNIST: DSFL, fixed top-K, FEDS, FedAvg (no compression). | Main result figures (all three datasets) |
-| 9–11 | Generate accuracy vs. rounds, accuracy vs. total bits transmitted, K-trajectory per client. Same seeds and capacity draws for DSFL vs FEDS for fair comparison. | All experiment figures |
-| 12–14 | Write full paper draft: intro, related work, system model, algorithm, experiments (DSFL-matched setup), conclusion. | Complete draft (6 pages) |
-| 15–17 | Revise draft. Add K-trajectory visualization. Insert theoretical positioning section. | Revised draft |
-| 18–19 | Final polish. IEEE two-column format. Proofread. Submit. | Submitted PDF |
+| 1–2 | Run full experiments on all three datasets. Generate baseline comparisons (FedAvg, fixed K, DSFL). | Raw experimental results |
+| 3–5 | Generate all paper figures: accuracy vs. rounds, accuracy vs. bits, K-trajectory, loss-K correlation. | Publication-ready figures |
+| 6–8 | Write full paper draft: intro, related work, system model, algorithm, experiments, conclusion. | Complete draft (6 pages) |
+| 9–11 | Revise draft. Add theoretical positioning section. Polish methodology description. | Revised draft |
+| 12–14 | Final polish. IEEE two-column format. Proofread. Submit. | Submitted PDF |
+
+### 9.3 Key Hyperparameters for Experiments
+
+| Parameter | Value | Rationale |
+|-----------|-------|-----------|
+| `K_min` | `max(100, d//100)` | At least 1% of parameters retained |
+| `K_max` | `d` | Full model size (no compression) |
+| `WARMUP_ROUNDS` | `5` | Allow loss to stabilize before adaptation |
+| `MOMENTUM` | `0.3` | Smooth K updates, prevent oscillation |
+| `ETA_BASE` | `1,000,000` | Scaled for normalized delta_L magnitude |
+| `ETA_DECAY` | `0.995` | Gradual stabilization over 300 rounds |
 
 ---
 
-## 9. Phase 2 Roadmap: From FEDS to MAB-DSFL
+## 10. Phase 2 Roadmap: From FEDS to MAB-DSFL
 
 FEDS is deliberately designed as the first step in a two-phase research arc. The loss-feedback adaptive K in Phase 1 lays the groundwork for a full MAB formulation in Phase 2.
 
@@ -230,7 +310,7 @@ The key design decision: FEDS's ΔL<sub>i</sub>[*t*] signal is the natural rewar
 
 ---
 
-## 10. Connection to Prof. Ning Lu's Research Agenda
+## 11. Connection to Prof. Ning Lu's Research Agenda
 
 This proposal is consciously designed to land at the intersection of all three of Prof. Lu's major published contributions:
 
@@ -242,7 +322,7 @@ The proposed email to Prof. Lu should present FEDS not as a new idea from outsid
 
 ---
 
-## 11. Target Paper Outline (6-Page Globecom Format)
+## 12. Target Paper Outline (6-Page Globecom Format)
 
 | Section | Content | Est. Length |
 |---------|---------|-------------|
@@ -255,14 +335,32 @@ The proposed email to Prof. Lu should present FEDS not as a new idea from outsid
 
 ---
 
-## 12. Available Resources
+## 13. Available Resources
+
+### 13.1 Codebase Resources
 
 - **DSFL codebase** (Mahdi Beitollahi, public GitHub: github.com/mahdibeit/DSFL) — full implementation of LSS + top-K + error accumulation using Flower framework
+- **FEDS implementation** (this repository) — enhanced adaptive sparsification with:
+  - `utils/LayerWiseSparsification_feds.py` — core adaptive K mechanism
+  - `utils/dsfl_feds.py` — FEDS pipeline integration
+  - `utils/visualize_k_trajectory.py` — publication-ready figure generation
+  - `utils/validate_feds.py` — mechanism validation and debugging
+
+### 13.2 Theoretical Resources
+
 - **HeteRo-Select codebase** — existing non-IID FL scheduling implementation; useful for optional ablations (e.g. different non-IID partitions) in Phase 2
 - **Prof. Ning Lu's POSS and Backlogged Bandits papers** — theoretical scaffolding for Phase 2 MAB extension
 - **Juaren Steiger's IEEE ToN 2026 paper** — most mature version of the bandit framework in the lab
 - **Slivkins MAB textbook** — being read in parallel; will inform Phase 2 UCB formulation
 
+### 13.3 Output Files for Paper Figures
+
+| File | Generated By | Used For |
+|------|--------------|----------|
+| `feds_k_trajectory.json` | Training run | K trajectory visualization |
+| `feds_k_tracker.json` | Training run | Current K state and loss history |
+| `runs/` directory | TensorBoard | Accuracy/loss curves, K statistics |
+
 ---
 
-*Prepared by Md Akmol Masud | March 2026 | Queen's University ECE — Incoming M.A.Sc. September 2026*
+Prepared by Md Akmol Masud | March 2026 | Queen's University ECE — Incoming M.A.Sc. September 2026
