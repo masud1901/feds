@@ -24,27 +24,24 @@ where `ΔL_i[t]` is the relative loss improvement, `τ` is the mean improvement 
 
 ## Project Structure
 
+- **Baseline:** FedAvg (`methods/fedavg/`). **Baseline to beat:** DSFL (`methods/dsfl/`). **Proposed:** FEDS (`methods/feds/`).
+- **Datasets:** MNIST, CIFAR-10, Speech Commands — clients in `clients/mnist.py`, `clients/cifar10.py`, `clients/speech_commands.py`.
+
 ```
 adaptive-sparsification/
-├── server.py                          # Flower server with FedComp strategy
-├── clients/
-│   ├── client-MNIST.py                # MNIST client (CNN)
-│   ├── client-CIFAR.py                # CIFAR-10 client (CNN)
-│   └── client-SpeechCommands.py       # Speech Commands client (CNN)
-├── utils/
-│   ├── dsfl.py                        # Original DSFL utilities
-│   ├── dsfl_feds.py                   # FEDS-specific utilities
-│   ├── LayerWiseSparsification.py     # Original DSFL sparsification
-│   ├── LayerWiseSparsification_feds.py # FEDS adaptive sparsification
-│   ├── FindingK.py                    # CKA analysis for CIFAR
-│   ├── FindingKSpeech.py              # CKA analysis for Speech
-│   ├── visualize_k_trajectory.py      # K trajectory visualization
-│   └── validate_feds.py               # FEDS validation script
-├── docs/
-│   └── feds.md                        # Research proposal & Globecom plan
-├── run-mnistclients.sh                # Launch MNIST clients
-├── run-cifarclients.sh                # Launch CIFAR clients
-└── run-speechclients.sh               # Launch Speech clients
+├── methods/fedavg/server.py           # FedAvg baseline
+├── methods/dsfl/server.py              # DSFL (fixed K)
+├── methods/feds/server.py              # FEDS (adaptive K, proposed)
+├── clients/mnist.py, cifar10.py, speech_commands.py
+├── common/                             # flatten, models
+├── utils/                              # FindingK, FindingKSpeech, validate_feds
+├── scripts/create_artifacts.py         # Initial models and K pickles
+├── scripts/run_fedavg.sh, run_dsfl.sh, run_feds.sh
+├── scripts/visualize_k_trajectory.py
+├── configs/                            # Optional dataset configs
+├── notebooks/                          # Colab/Kaggle notebooks
+├── outputs/                            # runs/, results JSON
+└── docs/feds.md
 ```
 
 ## Installation
@@ -62,33 +59,28 @@ pip install torch_cka
 
 ## Running Experiments
 
-### 1. Start the Server
+### Reproducibility
+
+From repo root with `PYTHONPATH=.:common:utils`:
 
 ```bash
-python server.py
+python scripts/create_artifacts.py --dataset all
+FEDS_DATASET=MNIST ./scripts/run_fedavg.sh   # FedAvg
+FEDS_DATASET=MNIST ./scripts/run_dsfl.sh    # DSFL
+FEDS_DATASET=MNIST ./scripts/run_feds.sh    # FEDS (proposed)
 ```
 
-The server will:
-- Initialize with a pre-trained global model (`initial_global_model_MNIST`)
-- Run for 300 rounds by default
-- Log accuracy, loss, and K statistics to TensorBoard
+Use `FEDS_DATASET=CIFAR10` or `FEDS_DATASET=Speech` for other datasets.
 
-### 2. Start Clients
-
-Run clients in separate terminals:
+### Manual: server then clients
 
 ```bash
-# For MNIST
-./run-mnistclients.sh
-
-# For CIFAR-10
-./run-cifarclients.sh
-
-# For Speech Commands
-./run-speechclients.sh
+export PYTHONPATH=".:common:utils"
+python methods/feds/server.py
+# In other terminals: python clients/mnist.py --seed=0 ... --seed=9
 ```
 
-### 3. Monitor Training
+### Monitor Training
 
 View TensorBoard logs:
 ```bash
@@ -100,12 +92,10 @@ Logged metrics include:
 - `feds/k_mean`, `feds/k_std` - K value statistics
 - `feds/k_client_{i}` - per-client K values
 
-### 4. Analyze K Trajectory
-
-After training, visualize the adaptive K behavior:
+### Analyze K Trajectory (FEDS)
 
 ```bash
-python utils/visualize_k_trajectory.py --input feds_k_trajectory.json --output figures/
+python scripts/visualize_k_trajectory.py --input feds_k_trajectory.json --output figures/
 ```
 
 This generates:
@@ -113,7 +103,7 @@ This generates:
 - `feds_loss_k_correlation.png` - Loss improvement vs K change correlation
 - `feds_communication_savings.png` - Communication savings over time
 
-### 5. Validate FEDS
+### Validate FEDS
 
 Verify the adaptive mechanism is working:
 
@@ -123,7 +113,7 @@ python utils/validate_feds.py
 
 ## Configuration
 
-Key FEDS parameters in `utils/LayerWiseSparsification_feds.py`:
+Key FEDS parameters in `methods/feds/sparsification.py`:
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
@@ -141,7 +131,7 @@ Key FEDS parameters in `utils/LayerWiseSparsification_feds.py`:
 | `feds_k_tracker.json` | Current K values, loss history, K history |
 | `feds_k_trajectory.json` | Full K trajectory for visualization |
 | `feds_history.json` | Server round tracking |
-| `runs/` | TensorBoard logs |
+| `runs/` or `outputs/runs/` | TensorBoard logs |
 
 ## Research Context
 

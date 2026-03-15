@@ -1,0 +1,7 @@
+# Speech Commands experiment config
+dataset: Speech
+num_clients: 10
+num_rounds: 300
+server_address: localhost:8080
+data_path: data/speech_commands
+initial_model: initial_global_model_Speech

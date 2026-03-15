@@ -13,8 +13,8 @@ from flwr.common import (
 from flwr.server.client_proxy import ClientProxy
 from functools import reduce
 import numpy as np
-import pickle
 import json
+import numpy as np
 import os
 import warnings
 import copy
@@ -25,8 +25,14 @@ try:
 except Exception:
     SummaryWriter = None
 
-sys.path.insert(0, 'utils')
-from dsfl import alastor, Flatten
+# Run from repo root with PYTHONPATH=.:common
+REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if REPO not in sys.path:
+    sys.path.insert(0, REPO)
+if os.path.join(REPO, "common") not in sys.path:
+    sys.path.insert(0, os.path.join(REPO, "common"))
+from common.flatten import Flatten
+from methods.dsfl.aggregation import alastor
 
 
 class _NoOpWriter:
@@ -88,11 +94,11 @@ if __name__ == "__main__":
     DATASET = os.environ.get("FEDS_DATASET", "MNIST")
 
     model_files = {
-        "MNIST": "initial_global_model_MNIST",
-        "CIFAR10": "initial_global_model_CIFAR",
-        "Speech": "initial_global_model_Speech"
+        "MNIST": "initial_global_model_MNIST.npz",
+        "CIFAR10": "initial_global_model_CIFAR.npz",
+        "Speech": "initial_global_model_Speech.npz"
     }
-    model_file = model_files.get(DATASET, "initial_global_model_MNIST")
+    model_file = model_files.get(DATASET, "initial_global_model_MNIST.npz")
 
     history = History()
 
@@ -150,18 +156,18 @@ if __name__ == "__main__":
             return ndarrays_to_parameters(aggregateDSFL(weights_results, client_id)), {}
 
     print(f"Loading model: {model_file}")
-    with open(model_file, 'rb') as f:
-        initial_model = pickle.load(f)
-
-    history.updateGlobal(Flatten(initial_model[0][0])[0])
-    history.updateError([[0]*len(Flatten(initial_model[0][0])[0]) for _ in range(number_of_users)])
+    data = np.load(model_file)
+    keys = sorted(data.files, key=lambda k: int(k.split("_")[1]) if "_" in k else 0)
+    params = [data[k] for k in keys]
+    history.updateGlobal(Flatten(params)[0])
+    history.updateError([[0] * len(Flatten(params)[0]) for _ in range(number_of_users)])
 
     strategy = DSFLStrategy(
         fraction_fit=1.0,
         fraction_evaluate=1.0,
         min_fit_clients=number_of_users,
         min_available_clients=number_of_users,
-        initial_parameters=ndarrays_to_parameters(initial_model[0][0]),
+        initial_parameters=ndarrays_to_parameters(params),
     )
 
     print(f"Starting DSFL server for {DATASET}")

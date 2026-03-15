@@ -1,12 +1,16 @@
 # -*- coding: utf-8 -*-
 """
-Created on Fri May  6 23:03:34 2022
-
-@author: Mahdi
+DSFL layer-wise sparsification (CKA-based). Run from repo root with PYTHONPATH=.:utils.
 """
 import numpy as np
-import pickle
+import os
+import sys
+import json
 import matplotlib.pyplot as plt
+
+REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if os.path.join(REPO, "utils") not in sys.path:
+    sys.path.insert(0, os.path.join(REPO, "utils"))
 from FindingKSpeech import findK
 
 
@@ -23,8 +27,13 @@ def layerSparsification(flatten_weights, history, oldseperation):
     num_user = len(flatten_weights)
     dynamic_sparsification = True  # If false we use the minimum of K
     # k_list = [len(flatten_weights[0])] * num_user
-    with open('K_alpha=10_gamma=10_test=0.pickle', 'rb') as f:
-        k_list = pickle.load(f)
+    k_list = [len(flatten_weights[0]) // 2] * num_user  # default
+    for k_file in ('K_initial.json', 'K_Speech_initial.json'):
+        if os.path.exists(k_file):
+            with open(k_file, 'r') as f:
+                data = json.load(f)
+                k_list = data.get('k_list', data)
+            break
     seperation = oldseperation[::2]
     print(seperation)
     # k_list =[[300, 6, 200, 16, 96, 20, 40, 10, 30, 10]] * num_user

@@ -10,7 +10,6 @@ Enhanced implementation with:
 - K trajectory logging for analysis
 """
 import numpy as np
-import pickle
 import os
 import json
 from datetime import datetime
@@ -58,17 +57,21 @@ def layerSparsification(flatten_weights, history, oldseperation, metrics=None):
             loss_history = k_tracker.get('loss_history', [])
             k_history = k_tracker.get('k_history', [])
     except (FileNotFoundError, json.JSONDecodeError):
-        # Initialize from original DSFL K values or uniform
-        try:
-            with open('K_alpha=10_gamma=10_test=0.pickle', 'rb') as f:
-                initial_k = pickle.load(f)
-                # Handle both scalar and list K values
-                if isinstance(initial_k[0], list):
-                    k_list = [sum(k) for k in initial_k]  # Sum per-layer K
-                else:
-                    k_list = list(initial_k)
-        except FileNotFoundError:
-            k_list = [d // 2] * num_user  # Default to 50% sparsity
+        # Initialize from K_initial.json or K_Speech_initial.json
+        k_list = [d // 2] * num_user
+        for k_file in ('K_initial.json', 'K_Speech_initial.json'):
+            if os.path.exists(k_file):
+                try:
+                    with open(k_file, 'r') as f:
+                        data = json.load(f)
+                        initial_k = data.get('k_list', data)
+                    if isinstance(initial_k[0], list):
+                        k_list = [sum(k) for k in initial_k]
+                    else:
+                        k_list = list(initial_k)
+                except (json.JSONDecodeError, KeyError, TypeError):
+                    pass
+                break
 
         prev_losses = [None] * num_user
         loss_history = []

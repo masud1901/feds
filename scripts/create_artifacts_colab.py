@@ -1,13 +1,14 @@
-"""Create initial_global_model_MNIST and K pickle for Colab/local runs."""
+"""Create initial_global_model_MNIST and K_initial.json for Colab/local runs."""
 import os
 import sys
+import json
+import numpy as np
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO)
 sys.path.insert(0, os.path.join(REPO, "utils"))
 os.chdir(REPO)
 
-p = __import__("pickle")
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -31,22 +32,21 @@ class Net(nn.Module):
 
 
 if __name__ == "__main__":
-    if not os.path.exists("initial_global_model_MNIST"):
+    model_path = "initial_global_model_MNIST.npz"
+    if not os.path.exists(model_path):
         net = Net()
         params = [val.cpu().numpy() for _, val in net.state_dict().items()]
-        initial_model = [(params, 1)]
-        with open("initial_global_model_MNIST", "wb") as f:
-            p.dump(initial_model, f)
-        print("Created initial_global_model_MNIST")
+        np.savez_compressed(model_path, *params)
+        print("Created", model_path)
     else:
-        print("initial_global_model_MNIST already exists")
+        print(model_path, "already exists")
 
-    k_pickle = "K_alpha=10_gamma=10_test=0.pickle"
-    if not os.path.exists(k_pickle):
+    k_path = "K_initial.json"
+    if not os.path.exists(k_path):
         d = 582026
         k_list = [d // 2] * 10
-        with open(k_pickle, "wb") as f:
-            p.dump(k_list, f)
-        print("Created", k_pickle)
+        with open(k_path, "w") as f:
+            json.dump({"k_list": k_list}, f)
+        print("Created", k_path)
     else:
-        print(k_pickle, "already exists")
+        print(k_path, "already exists")

@@ -1,20 +1,18 @@
-"""Create initial_global_model_CIFAR for CIFAR-10 experiments."""
+"""Create initial_global_model_CIFAR and K_initial.json for CIFAR-10 runs."""
 import os
 import sys
-import pickle
+import json
+import numpy as np
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO)
 sys.path.insert(0, os.path.join(REPO, "utils"))
 os.chdir(REPO)
 
-import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-
 class Net(nn.Module):
-    """CIFAR-10 CNN model."""
     def __init__(self):
         super(Net, self).__init__()
         self.conv1 = nn.Conv2d(3, 6, 5)
@@ -35,24 +33,21 @@ class Net(nn.Module):
 
 
 if __name__ == "__main__":
-    if not os.path.exists("initial_global_model_CIFAR"):
+    model_path = "initial_global_model_CIFAR.npz"
+    if not os.path.exists(model_path):
         net = Net()
         params = [val.cpu().numpy() for _, val in net.state_dict().items()]
-        initial_model = [(params, 1)]
-        with open("initial_global_model_CIFAR", "wb") as f:
-            pickle.dump(initial_model, f)
-        print("Created initial_global_model_CIFAR")
-        print(f"Total parameters: {sum(p.numel() for p in net.parameters())}")
+        np.savez_compressed(model_path, *params)
+        print("Created", model_path)
     else:
-        print("initial_global_model_CIFAR already exists")
+        print(model_path, "already exists")
 
-    # Create K pickle
-    k_pickle = "K_CIFAR_alpha=10_gamma=10_test=0.pickle"
-    if not os.path.exists(k_pickle):
-        d = 62006  # CIFAR-10 model parameters
+    k_path = "K_initial.json"
+    if not os.path.exists(k_path):
+        d = 62006
         k_list = [d // 2] * 10
-        with open(k_pickle, "wb") as f:
-            pickle.dump(k_list, f)
-        print(f"Created {k_pickle} with K={d//2}")
+        with open(k_path, "w") as f:
+            json.dump({"k_list": k_list}, f)
+        print("Created", k_path)
     else:
-        print(f"{k_pickle} already exists")
+        print(k_path, "already exists")

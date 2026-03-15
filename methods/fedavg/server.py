@@ -2,10 +2,10 @@
 import flwr
 from flwr.server.strategy import FedAvg
 from flwr.common import ndarrays_to_parameters
-import pickle
 import json
 import os
 import warnings
+import numpy as np
 
 try:
     from torch.utils.tensorboard import SummaryWriter
@@ -26,9 +26,9 @@ if __name__ == "__main__":
     DATASET = os.environ.get("FEDS_DATASET", "MNIST")
 
     model_files = {
-        "MNIST": "initial_global_model_MNIST",
-        "CIFAR10": "initial_global_model_CIFAR",
-        "Speech": "initial_global_model_Speech"
+        "MNIST": "initial_global_model_MNIST.npz",
+        "CIFAR10": "initial_global_model_CIFAR.npz",
+        "Speech": "initial_global_model_Speech.npz"
     }
     model_file = model_files.get(DATASET, "initial_global_model_MNIST")
 
@@ -74,15 +74,16 @@ if __name__ == "__main__":
             return super().aggregate_evaluate(rnd, results, failures)
 
     print(f"Loading model: {model_file}")
-    with open(model_file, 'rb') as f:
-        initial_model = pickle.load(f)
+    data = np.load(model_file)
+    keys = sorted(data.files, key=lambda k: int(k.split("_")[1]) if "_" in k else 0)
+    params = [data[k] for k in keys]
 
     strategy = FedAvgBaseline(
         fraction_fit=1.0,
         fraction_evaluate=1.0,
         min_fit_clients=number_of_users,
         min_available_clients=number_of_users,
-        initial_parameters=ndarrays_to_parameters(initial_model[0][0]),
+        initial_parameters=ndarrays_to_parameters(params),
     )
 
     print(f"Starting FedAvg baseline for {DATASET}")

@@ -188,9 +188,9 @@ We developed dedicated visualization scripts for paper figures:
 
 | Figure | Script | Description |
 | ------ | ------ | ----------- |
-| K trajectory | `utils/visualize_k_trajectory.py` | Per-client K values over training rounds |
-| Loss-K correlation | `utils/visualize_k_trajectory.py` | Scatter plot of ΔL vs. ΔK with correlation coefficient |
-| Communication savings | `utils/visualize_k_trajectory.py` | Percentage of bits saved vs. full transmission |
+| K trajectory | `scripts/visualize_k_trajectory.py` | Per-client K values over training rounds |
+| Loss-K correlation | `scripts/visualize_k_trajectory.py` | Scatter plot of ΔL vs. ΔK with correlation coefficient |
+| Communication savings | `scripts/visualize_k_trajectory.py` | Percentage of bits saved vs. full transmission |
 
 These scripts read from `feds_k_trajectory.json` which is automatically generated during training.
 
@@ -341,9 +341,9 @@ The proposed email to Prof. Lu should present FEDS not as a new idea from outsid
 
 - **DSFL codebase** (Mahdi Beitollahi, public GitHub: github.com/mahdibeit/DSFL) — full implementation of LSS + top-K + error accumulation using Flower framework
 - **FEDS implementation** (this repository) — enhanced adaptive sparsification with:
-  - `utils/LayerWiseSparsification_feds.py` — core adaptive K mechanism
-  - `utils/dsfl_feds.py` — FEDS pipeline integration
-  - `utils/visualize_k_trajectory.py` — publication-ready figure generation
+  - `methods/feds/sparsification.py` — core adaptive K mechanism
+  - `methods/feds/aggregation.py` — FEDS pipeline integration
+  - `scripts/visualize_k_trajectory.py` — publication-ready figure generation
   - `utils/validate_feds.py` — mechanism validation and debugging
 
 ### 13.2 Theoretical Resources

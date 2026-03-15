@@ -12,7 +12,6 @@ from flwr.common import (
 from flwr.server.client_proxy import ClientProxy
 from functools import reduce
 import numpy as np
-import pickle
 import json
 import os
 import warnings
@@ -23,7 +22,15 @@ except Exception:
 
 import copy
 
-from dsfl_feds import alastor_feds, Flatten
+# Run from repo root with PYTHONPATH=.:common
+import sys
+REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if REPO not in sys.path:
+    sys.path.insert(0, REPO)
+if os.path.join(REPO, "common") not in sys.path:
+    sys.path.insert(0, os.path.join(REPO, "common"))
+from common.flatten import Flatten
+from methods.feds.aggregation import alastor_feds
 
 
 class _NoOpWriter:
@@ -109,12 +116,19 @@ def aggregateNew(results: List[Tuple[List[np.ndarray], int]], client_id, client_
 
 if __name__ == "__main__":
 
-    number_of_users=10
-    
+    number_of_users = 10
+    DATASET = os.environ.get("FEDS_DATASET", "MNIST")
+    model_files = {
+        "MNIST": "initial_global_model_MNIST.npz",
+        "CIFAR10": "initial_global_model_CIFAR.npz",
+        "Speech": "initial_global_model_Speech.npz"
+    }
+    model_file = model_files.get(DATASET, "initial_global_model_MNIST.npz")
+
     history = History()
     if SummaryWriter is not None:
         try:
-            writer = SummaryWriter(comment=" FEDS - MNIST - NIID - Adaptive K with Loss Feedback")
+            writer = SummaryWriter(comment=f" FEDS - {DATASET} - NIID - Adaptive K with Loss Feedback")
         except Exception as e:
             print(f"TensorBoard disabled ({e}); metrics will not be logged to runs/.")
             writer = _NoOpWriter()
@@ -196,27 +210,25 @@ if __name__ == "__main__":
                 return ndarrays_to_parameters(aggregateNew(weights_results, client_id, client_metrics)), {}
     
 
-    # Set the initial model for reproducability
-    infile = open('initial_global_model_MNIST','rb')
-    initial_model = pickle.load(infile)
-    
-    history.updateGlobal(Flatten(initial_model[0][0])[0])
-    
-    history.updateError([[0]*len(Flatten(initial_model[0][0])[0]) for _ in range(number_of_users)])
-    
-    # Define strategy (initial_parameters must be Parameters type in current Flower API)
+    # Set the initial model for reproducibility
+    print(f"Loading model: {model_file}")
+    data = np.load(model_file)
+    keys = sorted(data.files, key=lambda k: int(k.split("_")[1]) if "_" in k else 0)
+    params = [data[k] for k in keys]
+    history.updateGlobal(Flatten(params)[0])
+    history.updateError([[0] * len(Flatten(params)[0]) for _ in range(number_of_users)])
     strategy = FedComp(
         fraction_fit=1.0,
         fraction_evaluate=1.0,
         min_fit_clients=number_of_users,
         min_available_clients=number_of_users,
-        initial_parameters=ndarrays_to_parameters(initial_model[0][0]),
+        initial_parameters=ndarrays_to_parameters(params),
     )
 
 
     
     
-    # Start server
+    print(f"Starting FEDS server for {DATASET}")
     flwr.server.start_server(
         server_address="localhost:8080",
         config={"num_rounds": 300},

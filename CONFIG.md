@@ -1,43 +1,36 @@
 # FEDS configuration reference
 
-## Server (server.py)
-- number_of_users: 10 (line ~103)
-- num_rounds: 300 (line ~207)
-- server_address: localhost:8080 (line ~206)
-- initial_global_model_MNIST: file in CWD (line ~184)
-- fraction_fit, fraction_eval: 1 (lines ~193-194)
-- min_fit_clients, min_available_clients: number_of_users (lines ~195-196)
-- TensorBoard: SummaryWriter comment at line ~106, logs in runs/
+## Servers (run from repo root with PYTHONPATH=.:common:utils)
 
-## FEDS (utils/LayerWiseSparsification_feds.py)
-- K_min: max(100, d//100) (~43)
-- K_max: d (~44)
-- WARMUP_ROUNDS: 5 (~45)
-- MOMENTUM: 0.3 (~46)
-- ETA_BASE: 1000000.0 (~47)
-- ETA_DECAY: 0.995 (~48)
-- k_tracker_file: feds_k_tracker.json (~51)
-- Initial K file at line ~63; create with test_feds_logic.py or scripts/create_artifacts_colab.py
-- History cap: 100 (~153-155)
-- tau: computed each round from mean relative loss improvement
+- **methods/fedavg/server.py** — FedAvg baseline
+- **methods/dsfl/server.py** — DSFL (fixed K)
+- **methods/feds/server.py** — FEDS (adaptive K)
 
-## MNIST client (clients/client-MNIST.py)
-- DEVICE: cpu (~28), use cuda:0 for GPU
-- lr: 0.1 (~63)
-- epochs per round: 1 (~196)
-- batch_size: 32 (~133, ~138)
-- IID: False (~154)
-- Data path: ../data/mnist/ (~130)
-- Server: localhost:8080 (~210)
-- --seed: CLI (~157), typically 0..9
+Common: number_of_users=10, num_rounds=300, server_address=localhost:8080, fraction_fit/fraction_eval=1, min_fit_clients/min_available_clients=number_of_users. Set **FEDS_DATASET** to MNIST, CIFAR10, or Speech. Initial model files: initial_global_model_MNIST.npz, initial_global_model_CIFAR.npz, initial_global_model_Speech.npz (NumPy compressed). K initial values: K_initial.json, K_Speech_initial.json (JSON).
 
-## Artifacts (repo root)
-- Initial K: create with test_feds_logic.py or scripts/create_artifacts_colab.py
-- initial_global_model_MNIST: create with scripts/create_artifacts_colab.py
+## FEDS (methods/feds/sparsification.py)
+
+- K_min: max(100, d//100), K_max: d
+- WARMUP_ROUNDS: 5, MOMENTUM: 0.3, ETA_BASE: 1000000.0, ETA_DECAY: 0.995
+- k_tracker_file: feds_k_tracker.json; initial K from K_initial.json or K_Speech_initial.json
+- Create artifacts: scripts/create_artifacts.py (writes .npz models and JSON K files)
+
+## Clients (clients/mnist.py, cifar10.py, speech_commands.py)
+
+- DEVICE: cpu or cuda:0, lr and batch_size per client script
+- IID: False (non-IID). Data paths: ../data/mnist/, etc. Server: localhost:8080. --seed: 0..9
+
+## Scripts
+
+- scripts/run_fedavg.sh, run_dsfl.sh, run_feds.sh — run server + 10 clients
+- scripts/create_artifacts.py --dataset all — create initial models and K pickles
+- scripts/visualize_k_trajectory.py — FEDS K trajectory figures
 
 ## Runtime
-- PYTHONPATH: include utils when running server
-- CWD: repo root for server and clients
 
-## Colab
-- REPO in first cell; PYTHONPATH=utils for server; 10 clients seeds 0..9; 300 rounds default
+- CWD: repo root. PYTHONPATH=.:common:utils (and utils for DSFL/FindingK).
+
+## Outputs
+
+- TensorBoard: runs/ (or outputs/runs/)
+- results_FedAvg_*.json, results_DSFL_*.json, feds_k_tracker.json, feds_k_trajectory.json

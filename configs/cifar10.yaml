@@ -1,0 +1,7 @@
+# CIFAR-10 experiment config
+dataset: CIFAR10
+num_clients: 10
+num_rounds: 300
+server_address: localhost:8080
+data_path: data/cifar10
+initial_model: initial_global_model_CIFAR
