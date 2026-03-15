@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Created on Tue Apr 12 20:36:15 2022
-
-@author: Mahdi
+Speech Commands Federated Learning Client — fixed for Flower >= 1.0
 """
 
 from collections import OrderedDict
@@ -14,10 +12,9 @@ import torch.nn.functional as F
 import torchvision.transforms as transforms
 from flwr.common.logger import log
 from logging import INFO
-from torch.utils.data import DataLoader, Dataset, ConcatDataset
+from torch.utils.data import DataLoader, Dataset
 from torchaudio.datasets import SPEECHCOMMANDS
 import numpy as np
-import random
 import argparse
 import os
 import torchaudio
@@ -29,17 +26,12 @@ import torchaudio
 
 warnings.filterwarnings("ignore", category=Warning)
 # DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-DEVICE = torch.device("cpu")
+DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
-    
-
-
-# #############################################################################
-# 1. PyTorch pipeline: model/train/test/dataloader
-# #############################################################################
-
-# Model (simple CNN adapted from 'PyTorch: A 60 Minute Blitz')
+# =============================================================================
+# Model
+# =============================================================================
 class Net(nn.Module):
     def __init__(self, n_input=1, n_output=35, stride=16, n_channel=32):
         super().__init__()
@@ -57,18 +49,18 @@ class Net(nn.Module):
         self.pool4 = nn.MaxPool1d(4)
         self.fc1 = nn.Linear(2 * n_channel, n_output)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.conv1(x)
-        x = F.relu((x))
+        x = F.relu(x)
         x = self.pool1(x)
         x = self.conv2(x)
-        x = F.relu((x))
+        x = F.relu(x)
         x = self.pool2(x)
         x = self.conv3(x)
-        x = F.relu((x))
+        x = F.relu(x)
         x = self.pool3(x)
         x = self.conv4(x)
-        x = F.relu((x))
+        x = F.relu(x)
         x = self.pool4(x)
         x = F.avg_pool1d(x, x.shape[-1])
         x = x.permute(0, 2, 1)
@@ -77,15 +69,14 @@ class Net(nn.Module):
 
 
 def train(net, trainloader, epochs, seed):
-    """Train the network on the training set. Returns average loss."""
+    """Train the network. Returns average loss."""
     criterion = torch.nn.CrossEntropyLoss()
     optimizer = torch.optim.SGD(net.parameters(), lr=0.1)
     new_sample_rate = 8000
     sample_rate = 16000
     transform = torchaudio.transforms.Resample(orig_freq=sample_rate, new_freq=new_sample_rate)
     net.train()
-    total_loss = 0.0
-    num_batches = 0
+    total_loss, num_batches = 0.0, 0
     for _ in range(epochs):
         for audio, labels in trainloader:
             audio, labels = audio.to(DEVICE), labels.to(DEVICE)
@@ -100,10 +91,10 @@ def train(net, trainloader, epochs, seed):
 
 
 def test(net, testloader):
-    """Validate the network on the entire test set."""
+    """Validate on the full test set."""
     criterion = torch.nn.CrossEntropyLoss()
     new_sample_rate = 8000
-    sample_rate=16000
+    sample_rate = 16000
     transform = torchaudio.transforms.Resample(orig_freq=sample_rate, new_freq=new_sample_rate)
     correct, total, loss = 0, 0, 0.0
     net.eval()
@@ -121,48 +112,44 @@ def test(net, testloader):
     return loss, accuracy
 
 
+# =============================================================================
+# Datasets
+# =============================================================================
 class DatasetSplit(Dataset):
     def __init__(self, dataset, seed):
         self.dataset = dataset
-        samples=[i for i in range(len(dataset))]
-        length = int(len(dataset)/10)
-        myrandom = random.Random(0)  # Fixiing the seed
-        myrandom.shuffle(samples)
-        self.idxs = samples[length*seed:length*seed+length]
-        
+        length = int(len(dataset) / 10)
+        self.idxs = list(np.arange(length * seed, length * seed + length))
+
     def __len__(self):
         return len(self.idxs)
 
     def __getitem__(self, item):
-        out= self.dataset[self.idxs[item]]
-        return out
-    
+        return self.dataset[self.idxs[item]]
+
+
 class DatasetNonIID(Dataset):
     def __init__(self, dataset, seed):
         seed = int(seed)
-        targets = [['right', 'house', 'go', 'seven', 'backward', 'down', 'bed'], ['right', 'house', 'go', 'seven', 'backward', 'down', 'bed'],
-                   ['follow', 'marvin', 'nine', 'three', 'eight', 'left', 'cat'], ['follow', 'marvin', 'nine', 'three', 'eight', 'left', 'cat'],
-                   ['happy', 'visual', 'zero', 'stop', 'four', 'tree', 'wow'], ['happy', 'visual', 'zero', 'stop', 'four', 'tree', 'wow'],
-                   ['off', 'up', 'six', 'two', 'forward', 'learn', 'five'], ['off', 'up', 'six', 'two', 'forward', 'learn', 'five'],
-                   ['sheila', 'bird', 'yes', 'dog', 'no', 'on', 'one'], ['sheila', 'bird', 'yes', 'dog', 'no', 'on', 'one']]
-        
-        self.userdataset = [(waveform, temp, label) for waveform, temp, label, *_ in dataset
-                            if label in targets[seed]]
-        print(len(self.userdataset))
-        
+        targets = [
+            ["right", "house", "go", "seven", "backward", "down", "bed"], ["right", "house", "go", "seven", "backward", "down", "bed"],
+            ["follow", "marvin", "nine", "three", "eight", "left", "cat"], ["follow", "marvin", "nine", "three", "eight", "left", "cat"],
+            ["happy", "visual", "zero", "stop", "four", "tree", "wow"], ["happy", "visual", "zero", "stop", "four", "tree", "wow"],
+            ["off", "up", "six", "two", "forward", "learn", "five"], ["off", "up", "six", "two", "forward", "learn", "five"],
+            ["sheila", "bird", "yes", "dog", "no", "on", "one"], ["sheila", "bird", "yes", "dog", "no", "on", "one"],
+        ]
+        self.userdataset = [(w, t, label) for w, t, label, *_ in dataset if label in targets[seed]]
+
     def __len__(self):
-        return min(len(self.userdataset), 15367)
-        # return 15367
+        return len(self.userdataset)
 
     def __getitem__(self, item):
-
-        out = self.userdataset[item]
-        return out
+        return self.userdataset[item]
 
 
 def load_data(seed, IID):
-    """Load SpeachCommands (training and test set)."""
-    
+    """Load Speech Commands training and test sets."""
+
     class SubsetSC(SPEECHCOMMANDS):
         def __init__(self, subset: str = None):
             super().__init__("./", download=True)
@@ -185,17 +172,13 @@ def load_data(seed, IID):
     train_set = SubsetSC("training")
     test_set = SubsetSC("testing")
     labels = sorted(list(set(datapoint[2] for datapoint in train_set)))
-    
+
     def label_to_index(word):
-    # Return the position of the word in labels
         return torch.tensor(labels.index(word))
 
-
     def index_to_label(index):
-    # Return the word corresponding to the index in labels
-    # This is the inverse of label_to_index
         return labels[index]
-    
+
     def pad_sequence(batch):
         # Make all tensor in a batch the same length by padding with zeros
         batch = [item.t() for item in batch]
@@ -204,109 +187,88 @@ def load_data(seed, IID):
     
     
     def collate_fn(batch):
-    
-        # A data tuple has the form:
-        # waveform, sample_rate, label, speaker_id, utterance_number
-    
         tensors, targets = [], []
-    
-        # Gather in lists, and encode labels as indices
         for waveform, _, label, *_ in batch:
             tensors += [waveform]
             targets += [label_to_index(label)]
-    
-        # Group the list of tensors into a batched tensor
         tensors = pad_sequence(tensors)
         targets = torch.stack(targets)
-
         return tensors, targets
-    
-    if IID==True:
-        trainloader = DataLoader(DatasetSplit(train_set,seed), batch_size=32, shuffle=True, collate_fn=collate_fn, pin_memory=True)
-        testloader = DataLoader(DatasetSplit(test_set,seed), batch_size=32,collate_fn=collate_fn,pin_memory=True)
-        num_examples = {"trainset": len(train_set), "testset": len(test_set)}
-        return trainloader, testloader, num_examples
+
+    if IID:
+        trainloader = DataLoader(DatasetSplit(train_set, seed), batch_size=32, shuffle=True, collate_fn=collate_fn, pin_memory=True)
+        testloader = DataLoader(DatasetSplit(test_set, seed), batch_size=32, collate_fn=collate_fn, pin_memory=True)
     else:
         trainloader = DataLoader(DatasetNonIID(train_set, seed), batch_size=32, shuffle=True, collate_fn=collate_fn, pin_memory=True)
         testloader = DataLoader(DatasetNonIID(test_set, seed), batch_size=32, collate_fn=collate_fn, pin_memory=True)
-        num_examples = {"trainset": len(train_set), "testset": len(test_set)}
-        print(seed, num_examples)
-        return trainloader, testloader, num_examples
+    num_examples = {"trainset": len(train_set), "testset": len(test_set)}
+    return trainloader, testloader, num_examples
 
 
 
 
-# #############################################################################
-# 2. Federation of the pipeline with Flower
-# #############################################################################
+# =============================================================================
+# Flower Client — fixed for Flower >= 1.0
+# =============================================================================
+class SpeechCommandsClient(fl.client.NumPyClient):
+    def __init__(self, args, net, trainloader, testloader, num_examples):
+        super().__init__()
+        self.args = args
+        self.net = net
+        self.trainloader = trainloader
+        self.testloader = testloader
+        self.num_examples = num_examples
+
+    def get_parameters(self, config):
+        return [val.cpu().numpy() for _, val in self.net.state_dict().items()]
+
+    def set_parameters(self, parameters):
+        params_dict = zip(self.net.state_dict().keys(), parameters)
+        state_dict = OrderedDict({k: torch.tensor(v) for k, v in params_dict})
+        self.net.load_state_dict(state_dict, strict=True)
+
+    def fit(self, parameters, config):
+        self.set_parameters(parameters)
+        train_loss = train(self.net, self.trainloader, 5, self.args.seed)
+        return self.get_parameters(config={}), self.num_examples["trainset"], {"train_loss": train_loss}
+
+    def evaluate(self, parameters, config):
+        self.set_parameters(parameters)
+        loss, accuracy = test(self.net, self.testloader)
+        return float(loss), self.num_examples["testset"], {"accuracy": float(accuracy)}
 
 
+# =============================================================================
+# Main
+# =============================================================================
 def main():
-    
     iid = False
-    
-    """Fixing the seed for reproducability"""
+
     parser = argparse.ArgumentParser()
-    parser.add_argument("--seed", help="set the seed for reporiducabilty")
+    parser.add_argument("--seed", type=int, default=0,
+                        help="Seed for reproducibility and data split")
     args = parser.parse_args()
-    if args.seed:
-        seed = args.seed
-        log(INFO, f"Using seed {seed} for reproducability")
-        torch.manual_seed(seed)
-        np.random.seed(0)
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
-        
-    
-    """Create model, load data, define Flower client, start Flower client."""
 
-    
+    log(INFO, f"Using seed {args.seed} for reproducibility")
+    torch.manual_seed(args.seed)
+    np.random.seed(args.seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
-    # Load data (Speech Command)
-    trainloader, testloader, num_examples = load_data(int(args.seed),IID=iid)
-    
-    # Load model
     net = Net(n_input=1, n_output=35).to(DEVICE)
-    
+    trainloader, testloader, num_examples = load_data(args.seed, IID=iid)
+
     if iid:
         log(INFO, "Using IID dataset")
     else:
         log(INFO, "Using Non-IID dataset")
-    
-    # Flower client
-    class CifarClient(fl.client.NumPyClient):
-        def __init__(self,args):
-            super().__init__()
-            self.Global_round=0
-            self.args=args
-            
-        def get_parameters(self):
-            torch.save(net.state_dict(), f'SPEECH\Model{int(args.seed)}.pt')
-            return [val.cpu().numpy() for _, val in net.state_dict().items()]
 
-        def set_parameters(self, parameters):
-            params_dict = zip(net.state_dict().keys(), parameters)
-            state_dict = OrderedDict({k: torch.tensor(v) for k, v in params_dict})
-            net.load_state_dict(state_dict, strict=True)
-            if int(args.seed)==0:
-                torch.save(net.state_dict(), f'SpeechGL\ModelGL.pt')
+    client = SpeechCommandsClient(args, net, trainloader, testloader, num_examples)
 
-        def fit(self, parameters, config):
-            self.set_parameters(parameters)
-            train_loss = train(net, trainloader, 5, self.args.seed)
-
-            """Utilize the seed number as the IID number
-            [Seed Number, Parameters]
-            """
-            return self.get_parameters(), num_examples["trainset"], {"train_loss": train_loss}
-
-        def evaluate(self, parameters, config):
-            self.set_parameters(parameters)
-            loss, accuracy = test(net, testloader)
-            return float(loss), num_examples["testset"], {"accuracy": float(accuracy)}
-
-    # Start client
-    fl.client.start_numpy_client("localhost:8080", client=CifarClient(args))
+    fl.client.start_numpy_client(
+        server_address="localhost:8080",
+        client=client,
+    )
 
 
 if __name__ == "__main__":
