@@ -1,0 +1,14 @@
+\begin{table}
+\caption{MNIST (Non-IID, 10 clients, 200 rounds, α=10, γ=10).}
+\label{tab:mnist}
+\begin{tabular}{lccccccc}
+\toprule
+Method & Best Acc (%) & Best Round & Final Acc (%) & Final Loss & Avg K & Comm. Saving & Time (min) \\
+\midrule
+FedAvg & 98.08 & 178 & 97.96 & 0.0873 & N/A & N/A & 15.4 \\
+Fixed Top-K & 98.23 & 168 & 98.02 & 0.0895 & 6525 & 97.1% & 15.5 \\
+DSFL & 97.43 & 184 & 96.53 & 0.1175 & 33638 & 85.2% & 82.1 \\
+\textbf{FEDS (Ours)} & 98.29 & 175 & 97.38 & 0.1033 & 34033 & 85.0% & 15.6 \\
+\bottomrule
+\end{tabular}
+\end{table}

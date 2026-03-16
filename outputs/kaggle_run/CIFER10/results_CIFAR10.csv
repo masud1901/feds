@@ -1,0 +1,5 @@
+Method,Best Acc (%),Best Round,Final Acc (%),Final Loss,Avg K,Comm. Saving,Time (min)
+FedAvg,64.03,121,62.09,1.0738,N/A,N/A,14.7
+Fixed Top-K,60.63,191,54.20,1.2295,6542,97.1%,14.8
+DSFL,58.99,188,51.93,1.4167,33655,85.2%,123.5
+FEDS (Ours),63.95,195,59.79,1.1258,34119,85.0%,14.9
